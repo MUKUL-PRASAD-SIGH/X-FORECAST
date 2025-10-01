@@ -1,0 +1,2 @@
+# This file ensures the processed data directory is tracked by git
+# Forecast outputs and cleaned data will be saved here
