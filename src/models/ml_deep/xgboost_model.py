@@ -23,7 +23,14 @@ class XGBoostForecaster:
     
     def prepare_data(self, data: pd.DataFrame, target_col='demand'):
         """Prepare data for ML training"""
-        feature_cols = [col for col in data.columns if col != target_col and col != 'date']
+        # Exclude non-numeric columns and target/date columns
+        feature_cols = []
+        for col in data.columns:
+            if col not in [target_col, 'date', 'product_id']:
+                # Only include numeric columns
+                if data[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    feature_cols.append(col)
+        
         X = data[feature_cols].fillna(0)
         y = data[target_col]
         self.feature_cols = feature_cols
