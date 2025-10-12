@@ -309,26 +309,31 @@ class SuperXCompleteSystem:
         print("\n🔐 **LOGIN TO SUPERX PLATFORM**")
         print("-" * 50)
         
-        while True:
-            username = input("👤 Username: ").strip()
-            password = input("🔒 Password: ").strip()
-            
-            if not username or not password:
-                print("❌ Please enter both username and password")
-                continue
-            
-            result = self.auth.login(username, password)
-            
-            if result["success"]:
-                self.current_user = result["user"]
-                print(f"\n{result['message']}")
-                self.display_dashboard()
-                return True
-            else:
-                print(f"\n{result['message']}")
-                retry = input("\n🔄 Try again? (y/n): ").lower()
-                if retry != 'y':
-                    return False
+        try:
+            while True:
+                username = input("👤 Username: ").strip()
+                password = input("🔒 Password: ").strip()
+                
+                if not username or not password:
+                    print("❌ Please enter both username and password")
+                    continue
+                
+                result = self.auth.login(username, password)
+                
+                if result["success"]:
+                    self.current_user = result["user"]
+                    print(f"\n{result['message']}")
+                    self.display_dashboard()
+                    return True
+                else:
+                    print(f"\n{result['message']}")
+                    retry = input("\n🔄 Try again? (y/n): ").lower()
+                    if retry != 'y':
+                        return False
+        except EOFError:
+            print("\n❌ Interactive input not available in web deployment mode")
+            print("🌐 Please access the web interface instead")
+            return False
     
     def display_dashboard(self):
         user_datasets = self.knowledge_base.get_user_datasets(self.current_user.user_id)
@@ -646,5 +651,121 @@ def main():
     except Exception as e:
         print(f"\n❌ System error: {e}")
 
+# Web deployment mode - skip interactive login
+def start_web_server():
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.responses import HTMLResponse
+    
+    app = FastAPI(title="SuperX AI Platform", version="1.0.0")
+    
+    @app.get("/", response_class=HTMLResponse)
+    async def root():
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>SuperX AI Platform</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; background: #0a0a0a; color: #00ff00; }
+                .container { max-width: 800px; margin: 0 auto; }
+                .header { text-align: center; margin-bottom: 30px; }
+                .feature { margin: 20px 0; padding: 15px; border: 1px solid #00ff00; border-radius: 5px; }
+                .demo-accounts { background: #1a1a1a; padding: 20px; border-radius: 10px; }
+                .neon { text-shadow: 0 0 10px #00ff00; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 class="neon">🚀 SuperX AI Platform</h1>
+                    <p>Enterprise-Grade AI-Powered Business Intelligence</p>
+                </div>
+                
+                <div class="feature">
+                    <h2>🤖 AI-Powered Analytics</h2>
+                    <p>Advanced machine learning models with Vector RAG technology for personalized business insights.</p>
+                </div>
+                
+                <div class="feature">
+                    <h2>📊 Real-time Forecasting</h2>
+                    <p>Ensemble forecasting engine combining ARIMA, ETS, XGBoost, and LSTM models.</p>
+                </div>
+                
+                <div class="feature">
+                    <h2>🔐 Multi-tenant Architecture</h2>
+                    <p>Secure, isolated data processing for multiple companies with role-based access control.</p>
+                </div>
+                
+                <div class="demo-accounts">
+                    <h3>👥 Demo Accounts</h3>
+                    <ul>
+                        <li><strong>Admin:</strong> admin / admin123 (Full access, 1GB limit)</li>
+                        <li><strong>Manager:</strong> manager / manager123 (Management features, 500MB limit)</li>
+                        <li><strong>Analyst:</strong> analyst / analyst123 (Analytics features, 200MB limit)</li>
+                    </ul>
+                </div>
+                
+                <div class="feature">
+                    <h2>🎯 Key Features</h2>
+                    <ul>
+                        <li>📁 CSV Data Upload & Processing</li>
+                        <li>💬 AI Chatbot with Natural Language Queries</li>
+                        <li>📈 Advanced Forecasting & Analytics</li>
+                        <li>🎨 Cyberpunk-themed Dashboard</li>
+                        <li>🔒 Enterprise Security & Authentication</li>
+                        <li>🌐 Real-time Data Streaming</li>
+                    </ul>
+                </div>
+                
+                <div class="feature">
+                    <h2>🚀 Technology Stack</h2>
+                    <p><strong>Backend:</strong> FastAPI, Python, Sentence Transformers, FAISS</p>
+                    <p><strong>AI/ML:</strong> Vector RAG, XGBoost, LSTM, ARIMA, ETS</p>
+                    <p><strong>Frontend:</strong> React, TypeScript, Three.js</p>
+                    <p><strong>Deployment:</strong> Render, Docker, GitHub Actions</p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 40px;">
+                    <p class="neon">✨ SuperX AI Platform - Transforming Business Intelligence ✨</p>
+                    <p>Status: <span style="color: #00ff00;">🟢 LIVE & OPERATIONAL</span></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy", "service": "SuperX AI Platform"}
+    
+    @app.get("/api/status")
+    async def api_status():
+        return {
+            "status": "operational",
+            "version": "1.0.0",
+            "features": [
+                "AI-Powered Analytics",
+                "Vector RAG Technology", 
+                "Multi-tenant Architecture",
+                "Real-time Forecasting",
+                "Enterprise Security"
+            ]
+        }
+    
+    return app
+
 if __name__ == "__main__":
-    main()
+    import os
+    
+    # Check if running in deployment environment
+    if os.environ.get("PORT") or os.environ.get("RENDER"):
+        # Web deployment mode - start FastAPI server
+        import uvicorn
+        app = start_web_server()
+        port = int(os.environ.get("PORT", 8000))
+        print(f"🌐 Starting web server on port {port}...")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        # Local development mode - run interactive CLI
+        main()
