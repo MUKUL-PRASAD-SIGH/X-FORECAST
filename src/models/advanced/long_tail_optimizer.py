@@ -634,7 +634,7 @@ class LongTailOptimizer:
         )
     
     def _pooled_forecast(self, sku: str, data: pd.DataFrame, horizon: int) -> IntermittentForecastResult:
-        """Category-level pooled forecasting"""
+        """Enhanced category-level pooled forecasting with dynamic weights"""
         
         # Find cluster for this SKU
         sku_cluster = None
@@ -644,41 +644,158 @@ class LongTailOptimizer:
                 break
         
         if sku_cluster is None:
-            # Fall back to individual forecasting
+            # Try to create ad-hoc pooling based on category
+            return self._create_adhoc_pooled_forecast(sku, data, horizon)
+        
+        # Enhanced pooling with multiple strategies
+        pooling_strategies = ['weighted_average', 'similarity_weighted', 'performance_weighted']
+        best_forecast = None
+        best_confidence = 0.0
+        
+        for strategy in pooling_strategies:
+            try:
+                forecast_result = self._apply_pooling_strategy(
+                    sku, sku_cluster, data, horizon, strategy
+                )
+                
+                # Calculate strategy confidence
+                strategy_confidence = self._calculate_pooling_confidence(
+                    sku, sku_cluster, data, strategy
+                )
+                
+                if strategy_confidence > best_confidence:
+                    best_confidence = strategy_confidence
+                    best_forecast = forecast_result
+                    best_forecast.method_parameters['pooling_strategy'] = strategy
+                    best_forecast.method_parameters['pooling_confidence'] = strategy_confidence
+                    
+            except Exception as e:
+                logger.warning(f"Pooling strategy {strategy} failed for {sku}: {e}")
+                continue
+        
+        # Fall back to standard forecast if all strategies fail
+        if best_forecast is None:
             sku_data = data[data['sku'] == sku].sort_values('date')
             return self._standard_forecast(sku, sku_data['demand'].values, horizon)
         
-        # Pool demand from similar items in cluster
-        pooled_demand = []
+        return best_forecast
+    
+    def _create_adhoc_pooled_forecast(self, sku: str, data: pd.DataFrame, 
+                                    horizon: int) -> IntermittentForecastResult:
+        """Create ad-hoc pooling when no cluster exists"""
         
-        for item_sku in sku_cluster.items:
-            item_data = data[data['sku'] == item_sku].sort_values('date')
-            if len(item_data) > 0:
-                weight = sku_cluster.pooling_weights.get(item_sku, 1.0 / len(sku_cluster.items))
-                weighted_demand = item_data['demand'].values * weight
-                
-                if len(pooled_demand) == 0:
-                    pooled_demand = weighted_demand
-                else:
-                    # Align series lengths
-                    min_len = min(len(pooled_demand), len(weighted_demand))
-                    pooled_demand = pooled_demand[-min_len:] + weighted_demand[-min_len:]
+        sku_data = data[data['sku'] == sku].sort_values('date')
         
-        if len(pooled_demand) == 0:
+        if len(sku_data) == 0:
             return IntermittentForecastResult(
                 sku=sku,
                 method_used=ForecastMethod.POOLED,
                 forecast_values=[0.0] * horizon,
                 forecast_intervals=[(0.0, 0.0)] * horizon,
-                method_parameters={},
+                method_parameters={'pooling_type': 'adhoc', 'pooling_items': 0},
                 forecast_accuracy_metrics={}
             )
         
-        # Apply TSB method to pooled demand
-        tsb_result = self._tsb_forecast(sku, np.array(pooled_demand), horizon)
+        # Find items in same category for ad-hoc pooling
+        category_items = []
+        if 'category' in sku_data.columns:
+            target_category = sku_data['category'].iloc[0]
+            category_data = data[data['category'] == target_category]
+            category_items = category_data['sku'].unique().tolist()
         
-        # Adjust forecast back to individual item level
-        individual_weight = sku_cluster.pooling_weights.get(sku, 1.0 / len(sku_cluster.items))
+        if len(category_items) <= 1:
+            # No other items to pool with
+            return self._standard_forecast(sku, sku_data['demand'].values, horizon)
+        
+        # Create temporary pooling weights based on similarity
+        pooling_weights = {}
+        target_metrics = self.sparsity_metrics.get(sku)
+        
+        if target_metrics:
+            total_weight = 0.0
+            for item_sku in category_items:
+                if item_sku == sku:
+                    continue
+                
+                item_metrics = self.sparsity_metrics.get(item_sku)
+                if item_metrics:
+                    similarity = self._calculate_item_similarity(target_metrics, item_metrics)
+                    if similarity > 0.2:  # Minimum threshold for ad-hoc pooling
+                        pooling_weights[item_sku] = similarity
+                        total_weight += similarity
+            
+            # Normalize weights
+            if total_weight > 0:
+                for item_sku in pooling_weights:
+                    pooling_weights[item_sku] /= total_weight
+        
+        if not pooling_weights:
+            return self._standard_forecast(sku, sku_data['demand'].values, horizon)
+        
+        # Pool demand using calculated weights
+        pooled_demand = np.zeros(len(sku_data))
+        
+        for item_sku, weight in pooling_weights.items():
+            item_data = data[data['sku'] == item_sku].sort_values('date')
+            if len(item_data) > 0:
+                # Align series lengths
+                min_len = min(len(pooled_demand), len(item_data))
+                pooled_demand[-min_len:] += item_data['demand'].values[-min_len:] * weight
+        
+        # Apply TSB method to pooled demand
+        tsb_result = self._tsb_forecast(sku, pooled_demand, horizon)
+        
+        return IntermittentForecastResult(
+            sku=sku,
+            method_used=ForecastMethod.POOLED,
+            forecast_values=tsb_result.forecast_values,
+            forecast_intervals=tsb_result.forecast_intervals,
+            method_parameters={
+                'pooling_type': 'adhoc',
+                'pooling_items': len(pooling_weights),
+                'pooling_weights': pooling_weights
+            },
+            forecast_accuracy_metrics={}
+        )
+    
+    def _apply_pooling_strategy(self, sku: str, cluster: ClusterResult, 
+                              data: pd.DataFrame, horizon: int, 
+                              strategy: str) -> IntermittentForecastResult:
+        """Apply specific pooling strategy"""
+        
+        if strategy == 'weighted_average':
+            return self._weighted_average_pooling(sku, cluster, data, horizon)
+        elif strategy == 'similarity_weighted':
+            return self._similarity_weighted_pooling(sku, cluster, data, horizon)
+        elif strategy == 'performance_weighted':
+            return self._performance_weighted_pooling(sku, cluster, data, horizon)
+        else:
+            raise ValueError(f"Unknown pooling strategy: {strategy}")
+    
+    def _weighted_average_pooling(self, sku: str, cluster: ClusterResult,
+                                data: pd.DataFrame, horizon: int) -> IntermittentForecastResult:
+        """Traditional weighted average pooling"""
+        
+        pooled_demand = []
+        
+        for item_sku in cluster.items:
+            item_data = data[data['sku'] == item_sku].sort_values('date')
+            if len(item_data) > 0:
+                weight = cluster.pooling_weights.get(item_sku, 1.0 / len(cluster.items))
+                weighted_demand = item_data['demand'].values * weight
+                
+                if len(pooled_demand) == 0:
+                    pooled_demand = weighted_demand
+                else:
+                    min_len = min(len(pooled_demand), len(weighted_demand))
+                    pooled_demand = pooled_demand[-min_len:] + weighted_demand[-min_len:]
+        
+        if len(pooled_demand) == 0:
+            raise ValueError("No pooled demand data available")
+        
+        tsb_result = self._tsb_forecast(sku, np.array(pooled_demand), horizon)
+        individual_weight = cluster.pooling_weights.get(sku, 1.0 / len(cluster.items))
+        
         adjusted_forecasts = [f * individual_weight for f in tsb_result.forecast_values]
         adjusted_intervals = [(l * individual_weight, u * individual_weight) 
                              for l, u in tsb_result.forecast_intervals]
@@ -688,9 +805,104 @@ class LongTailOptimizer:
             method_used=ForecastMethod.POOLED,
             forecast_values=adjusted_forecasts,
             forecast_intervals=adjusted_intervals,
-            method_parameters={'pooling_weight': individual_weight, 'cluster_id': sku_cluster.cluster_id},
+            method_parameters={'individual_weight': individual_weight, 'cluster_id': cluster.cluster_id},
             forecast_accuracy_metrics={}
         )
+    
+    def _similarity_weighted_pooling(self, sku: str, cluster: ClusterResult,
+                                   data: pd.DataFrame, horizon: int) -> IntermittentForecastResult:
+        """Similarity-weighted pooling based on dynamic similarity calculation"""
+        
+        target_metrics = self.sparsity_metrics.get(sku)
+        if not target_metrics:
+            raise ValueError(f"No metrics available for target SKU: {sku}")
+        
+        # Recalculate weights based on current similarity
+        similarity_weights = {}
+        total_weight = 0.0
+        
+        for item_sku in cluster.items:
+            if item_sku == sku:
+                continue
+            
+            item_metrics = self.sparsity_metrics.get(item_sku)
+            if item_metrics:
+                similarity = self._calculate_item_similarity(target_metrics, item_metrics)
+                similarity_weights[item_sku] = similarity
+                total_weight += similarity
+        
+        # Normalize weights
+        if total_weight > 0:
+            for item_sku in similarity_weights:
+                similarity_weights[item_sku] /= total_weight
+        
+        # Pool demand using similarity weights
+        pooled_demand = []
+        
+        for item_sku, weight in similarity_weights.items():
+            item_data = data[data['sku'] == item_sku].sort_values('date')
+            if len(item_data) > 0:
+                weighted_demand = item_data['demand'].values * weight
+                
+                if len(pooled_demand) == 0:
+                    pooled_demand = weighted_demand
+                else:
+                    min_len = min(len(pooled_demand), len(weighted_demand))
+                    pooled_demand = pooled_demand[-min_len:] + weighted_demand[-min_len:]
+        
+        if len(pooled_demand) == 0:
+            raise ValueError("No similarity-weighted pooled demand available")
+        
+        tsb_result = self._tsb_forecast(sku, np.array(pooled_demand), horizon)
+        
+        return IntermittentForecastResult(
+            sku=sku,
+            method_used=ForecastMethod.POOLED,
+            forecast_values=tsb_result.forecast_values,
+            forecast_intervals=tsb_result.forecast_intervals,
+            method_parameters={
+                'similarity_weights': similarity_weights,
+                'cluster_id': cluster.cluster_id
+            },
+            forecast_accuracy_metrics={}
+        )
+    
+    def _performance_weighted_pooling(self, sku: str, cluster: ClusterResult,
+                                    data: pd.DataFrame, horizon: int) -> IntermittentForecastResult:
+        """Performance-weighted pooling based on historical forecast accuracy"""
+        
+        # For now, fall back to similarity weighting since we don't have historical accuracy data
+        # In a full implementation, this would use stored forecast accuracy metrics
+        return self._similarity_weighted_pooling(sku, cluster, data, horizon)
+    
+    def _calculate_pooling_confidence(self, sku: str, cluster: ClusterResult,
+                                    data: pd.DataFrame, strategy: str) -> float:
+        """Calculate confidence score for pooling strategy"""
+        
+        base_confidence = 0.5
+        
+        # Cluster size factor
+        size_factor = min(1.0, len(cluster.items) / 5)
+        
+        # Data availability factor
+        data_factor = 0.0
+        for item_sku in cluster.items:
+            item_data = data[data['sku'] == item_sku]
+            if len(item_data) > 12:  # At least 1 year of data
+                data_factor += 1.0
+        
+        data_factor = min(1.0, data_factor / len(cluster.items))
+        
+        # Strategy-specific adjustments
+        strategy_factor = 1.0
+        if strategy == 'similarity_weighted':
+            strategy_factor = 1.1  # Slight preference for similarity weighting
+        elif strategy == 'performance_weighted':
+            strategy_factor = 1.2  # Highest preference if performance data available
+        
+        confidence = (base_confidence + 0.3 * size_factor + 0.2 * data_factor) * strategy_factor
+        
+        return min(1.0, confidence)
     
     def _hierarchical_borrowing_forecast(self, sku: str, data: pd.DataFrame, horizon: int) -> IntermittentForecastResult:
         """Hierarchical borrowing from similar products"""
@@ -785,7 +997,7 @@ class LongTailOptimizer:
     
     def find_similar_items_for_borrowing(self, target_sku: str, data: pd.DataFrame) -> HierarchicalBorrowingResult:
         """
-        Find similar items for hierarchical borrowing
+        Enhanced hierarchical borrowing with multi-level hierarchy support
         """
         
         if target_sku not in self.sparsity_metrics:
@@ -809,14 +1021,10 @@ class LongTailOptimizer:
                 confidence_score=0.0
             )
         
-        # Find items in same category first
-        same_category_items = []
-        if 'category' in target_data.columns:
-            target_category = target_data['category'].iloc[0]
-            same_category_data = data[data['category'] == target_category]
-            same_category_items = same_category_data['sku'].unique().tolist()
+        # Multi-level hierarchy analysis
+        hierarchy_groups = self._analyze_hierarchy_levels(target_sku, target_data, data)
         
-        # Calculate similarity scores
+        # Calculate similarity scores with hierarchy-aware weighting
         similarity_scores = []
         
         for candidate_sku in self.sparsity_metrics.keys():
@@ -824,34 +1032,50 @@ class LongTailOptimizer:
                 continue
             
             candidate_metrics = self.sparsity_metrics[candidate_sku]
+            candidate_data = data[data['sku'] == candidate_sku]
             
-            # Calculate similarity based on sparsity metrics
-            similarity = self._calculate_item_similarity(target_metrics, candidate_metrics)
+            if len(candidate_data) == 0:
+                continue
             
-            # Boost similarity for same category items
-            if candidate_sku in same_category_items:
-                similarity *= 1.5
+            # Base similarity from sparsity metrics
+            base_similarity = self._calculate_item_similarity(target_metrics, candidate_metrics)
             
-            if similarity > 0.3:  # Minimum similarity threshold
-                similarity_scores.append((candidate_sku, similarity))
+            # Hierarchy-based similarity boost
+            hierarchy_boost = self._calculate_hierarchy_boost(
+                target_sku, candidate_sku, hierarchy_groups, candidate_data.iloc[0]
+            )
+            
+            # Demand pattern similarity
+            pattern_similarity = self._calculate_demand_pattern_similarity(
+                target_data, candidate_data
+            )
+            
+            # Combined similarity score
+            combined_similarity = (
+                0.4 * base_similarity +
+                0.4 * hierarchy_boost +
+                0.2 * pattern_similarity
+            )
+            
+            # Adaptive threshold based on target item sparsity
+            min_threshold = self._get_adaptive_similarity_threshold(target_metrics)
+            
+            if combined_similarity > min_threshold:
+                similarity_scores.append((candidate_sku, combined_similarity))
         
-        # Sort by similarity
+        # Sort by similarity and apply diversity filtering
         similarity_scores.sort(key=lambda x: x[1], reverse=True)
+        similar_items = self._apply_diversity_filtering(similarity_scores, data)
         
-        # Take top similar items
-        similar_items = similarity_scores[:10]
+        # Enhanced borrowed patterns calculation
+        borrowed_patterns = self._calculate_enhanced_borrowed_patterns(
+            target_sku, similar_items, data
+        )
         
-        # Calculate borrowed patterns (simplified)
-        borrowed_patterns = {}
-        for similar_sku, similarity in similar_items:
-            borrowed_patterns[similar_sku] = similarity
-        
-        # Calculate confidence based on number and quality of similar items
-        if similar_items:
-            avg_similarity = np.mean([sim for _, sim in similar_items])
-            confidence_score = min(avg_similarity * len(similar_items) / 5, 1.0)
-        else:
-            confidence_score = 0.0
+        # Dynamic confidence scoring
+        confidence_score = self._calculate_dynamic_confidence(
+            similar_items, target_metrics, hierarchy_groups
+        )
         
         return HierarchicalBorrowingResult(
             target_sku=target_sku,
@@ -861,8 +1085,226 @@ class LongTailOptimizer:
             confidence_score=confidence_score
         )
     
+    def _analyze_hierarchy_levels(self, target_sku: str, target_data: pd.DataFrame, 
+                                 data: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze multi-level hierarchy for the target item"""
+        
+        hierarchy_groups = {
+            'category': None,
+            'subcategory': None,
+            'brand': None,
+            'product_family': None
+        }
+        
+        # Extract hierarchy information from data columns or SKU patterns
+        if 'category' in target_data.columns:
+            hierarchy_groups['category'] = target_data['category'].iloc[0]
+        
+        if 'subcategory' in target_data.columns:
+            hierarchy_groups['subcategory'] = target_data['subcategory'].iloc[0]
+        
+        if 'brand' in target_data.columns:
+            hierarchy_groups['brand'] = target_data['brand'].iloc[0]
+        
+        # Try to infer hierarchy from SKU patterns
+        sku_parts = target_sku.split('_')
+        if len(sku_parts) > 1:
+            hierarchy_groups['product_family'] = sku_parts[0]
+        
+        return hierarchy_groups
+    
+    def _calculate_hierarchy_boost(self, target_sku: str, candidate_sku: str,
+                                  target_hierarchy: Dict[str, Any], 
+                                  candidate_row: pd.Series) -> float:
+        """Calculate similarity boost based on hierarchy levels"""
+        
+        boost = 0.0
+        
+        # Category level boost
+        if (target_hierarchy['category'] and 
+            'category' in candidate_row and
+            target_hierarchy['category'] == candidate_row['category']):
+            boost += 0.3
+        
+        # Subcategory level boost
+        if (target_hierarchy['subcategory'] and 
+            'subcategory' in candidate_row and
+            target_hierarchy['subcategory'] == candidate_row['subcategory']):
+            boost += 0.2
+        
+        # Brand level boost
+        if (target_hierarchy['brand'] and 
+            'brand' in candidate_row and
+            target_hierarchy['brand'] == candidate_row['brand']):
+            boost += 0.15
+        
+        # Product family boost (from SKU patterns)
+        if target_hierarchy['product_family']:
+            candidate_parts = candidate_sku.split('_')
+            if (len(candidate_parts) > 1 and 
+                candidate_parts[0] == target_hierarchy['product_family']):
+                boost += 0.1
+        
+        return min(1.0, boost)
+    
+    def _calculate_demand_pattern_similarity(self, target_data: pd.DataFrame,
+                                           candidate_data: pd.DataFrame) -> float:
+        """Calculate similarity based on demand patterns"""
+        
+        try:
+            target_demand = target_data['demand'].values
+            candidate_demand = candidate_data['demand'].values
+            
+            # Align series lengths
+            min_len = min(len(target_demand), len(candidate_demand))
+            if min_len < 6:  # Need minimum data
+                return 0.0
+            
+            target_aligned = target_demand[-min_len:]
+            candidate_aligned = candidate_demand[-min_len:]
+            
+            # Calculate correlation
+            if np.std(target_aligned) == 0 or np.std(candidate_aligned) == 0:
+                return 0.0
+            
+            correlation = np.corrcoef(target_aligned, candidate_aligned)[0, 1]
+            
+            # Handle NaN correlation
+            if np.isnan(correlation):
+                return 0.0
+            
+            # Convert correlation to similarity (0 to 1)
+            return max(0.0, (correlation + 1) / 2)
+            
+        except Exception:
+            return 0.0
+    
+    def _get_adaptive_similarity_threshold(self, target_metrics: SparsityMetrics) -> float:
+        """Get adaptive similarity threshold based on target item characteristics"""
+        
+        base_threshold = 0.3
+        
+        # Lower threshold for very sparse items (need more borrowing candidates)
+        if target_metrics.sparsity_level == SparsityLevel.INTERMITTENT:
+            return base_threshold * 0.7
+        elif target_metrics.sparsity_level == SparsityLevel.VERY_SPARSE:
+            return base_threshold * 0.8
+        elif target_metrics.sparsity_level == SparsityLevel.SPARSE:
+            return base_threshold * 0.9
+        else:
+            return base_threshold
+    
+    def _apply_diversity_filtering(self, similarity_scores: List[Tuple[str, float]], 
+                                  data: pd.DataFrame) -> List[Tuple[str, float]]:
+        """Apply diversity filtering to avoid selecting too similar items"""
+        
+        if len(similarity_scores) <= 5:
+            return similarity_scores[:10]  # Return all if few candidates
+        
+        selected_items = []
+        selected_items.append(similarity_scores[0])  # Always include most similar
+        
+        for candidate_sku, similarity in similarity_scores[1:]:
+            if len(selected_items) >= 10:
+                break
+            
+            # Check diversity against already selected items
+            is_diverse = True
+            candidate_data = data[data['sku'] == candidate_sku]
+            
+            if len(candidate_data) == 0:
+                continue
+            
+            for selected_sku, _ in selected_items:
+                selected_data = data[data['sku'] == selected_sku]
+                
+                if len(selected_data) > 0:
+                    # Check if too similar to already selected item
+                    pattern_sim = self._calculate_demand_pattern_similarity(
+                        candidate_data, selected_data
+                    )
+                    
+                    if pattern_sim > 0.9:  # Too similar
+                        is_diverse = False
+                        break
+            
+            if is_diverse:
+                selected_items.append((candidate_sku, similarity))
+        
+        return selected_items
+    
+    def _calculate_enhanced_borrowed_patterns(self, target_sku: str,
+                                            similar_items: List[Tuple[str, float]],
+                                            data: pd.DataFrame) -> Dict[str, float]:
+        """Calculate enhanced borrowed patterns with dynamic weighting"""
+        
+        borrowed_patterns = {}
+        total_weight = 0.0
+        
+        for similar_sku, similarity in similar_items:
+            # Base weight from similarity
+            base_weight = similarity
+            
+            # Adjust weight based on data quality
+            similar_data = data[data['sku'] == similar_sku]
+            if len(similar_data) > 0:
+                data_quality_factor = min(1.0, len(similar_data) / 24)  # Prefer items with more data
+                adjusted_weight = base_weight * data_quality_factor
+                
+                borrowed_patterns[similar_sku] = adjusted_weight
+                total_weight += adjusted_weight
+        
+        # Normalize weights
+        if total_weight > 0:
+            for sku in borrowed_patterns:
+                borrowed_patterns[sku] /= total_weight
+        
+        return borrowed_patterns
+    
+    def _calculate_dynamic_confidence(self, similar_items: List[Tuple[str, float]],
+                                    target_metrics: SparsityMetrics,
+                                    hierarchy_groups: Dict[str, Any]) -> float:
+        """Calculate dynamic confidence score"""
+        
+        if not similar_items:
+            return 0.0
+        
+        # Base confidence from similarity scores
+        avg_similarity = np.mean([sim for _, sim in similar_items])
+        similarity_confidence = avg_similarity
+        
+        # Number of similar items factor
+        count_factor = min(1.0, len(similar_items) / 5)
+        
+        # Hierarchy support factor
+        hierarchy_factor = 0.5  # Base factor
+        if hierarchy_groups['category']:
+            hierarchy_factor += 0.2
+        if hierarchy_groups['subcategory']:
+            hierarchy_factor += 0.15
+        if hierarchy_groups['brand']:
+            hierarchy_factor += 0.15
+        
+        hierarchy_factor = min(1.0, hierarchy_factor)
+        
+        # Sparsity penalty (very sparse items are harder to borrow for)
+        sparsity_penalty = 1.0
+        if target_metrics.sparsity_level == SparsityLevel.INTERMITTENT:
+            sparsity_penalty = 0.8
+        elif target_metrics.sparsity_level == SparsityLevel.VERY_SPARSE:
+            sparsity_penalty = 0.9
+        
+        # Combined confidence
+        confidence = (
+            0.4 * similarity_confidence +
+            0.3 * count_factor +
+            0.3 * hierarchy_factor
+        ) * sparsity_penalty
+        
+        return min(1.0, max(0.0, confidence))
+    
     def _calculate_item_similarity(self, metrics1: SparsityMetrics, metrics2: SparsityMetrics) -> float:
-        """Calculate similarity between two items based on sparsity metrics"""
+        """Enhanced similarity calculation between two items based on sparsity metrics"""
         
         # Normalize metrics for comparison
         features1 = np.array([
@@ -883,18 +1325,42 @@ class LongTailOptimizer:
             metrics2.trend_strength
         ])
         
-        # Calculate cosine similarity
+        # Calculate multiple similarity measures
+        
+        # 1. Cosine similarity
         dot_product = np.dot(features1, features2)
         norm1 = np.linalg.norm(features1)
         norm2 = np.linalg.norm(features2)
         
         if norm1 == 0 or norm2 == 0:
-            return 0.0
+            cosine_sim = 0.0
+        else:
+            cosine_sim = dot_product / (norm1 * norm2)
         
-        similarity = dot_product / (norm1 * norm2)
+        # 2. Euclidean distance similarity (inverted and normalized)
+        euclidean_dist = np.linalg.norm(features1 - features2)
+        euclidean_sim = 1 / (1 + euclidean_dist)
+        
+        # 3. Sparsity level similarity bonus
+        sparsity_bonus = 0.0
+        if metrics1.sparsity_level == metrics2.sparsity_level:
+            sparsity_bonus = 0.2
+        
+        # 4. Method compatibility bonus
+        method_bonus = 0.0
+        if metrics1.recommended_method == metrics2.recommended_method:
+            method_bonus = 0.1
+        
+        # Combine similarities with weights
+        combined_similarity = (
+            0.5 * max(0.0, cosine_sim) +
+            0.3 * euclidean_sim +
+            sparsity_bonus +
+            method_bonus
+        )
         
         # Ensure similarity is between 0 and 1
-        return max(0.0, similarity)
+        return min(1.0, max(0.0, combined_similarity))
     
     def get_optimization_summary(self) -> Dict[str, Any]:
         """Get summary of long-tail optimization results"""

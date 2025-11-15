@@ -54,7 +54,18 @@ class ChatRequest(BaseModel):
     message: str
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify JWT token and return user data"""
+    """Verify JWT token and return user data.
+    When DISABLE_AUTH is set in the environment, return a local dev user payload to bypass authentication.
+    """
+    # Allow quick disabling of auth for local development/testing
+    if str(os.environ.get("DISABLE_AUTH", "0")).lower() in ("1", "true", "yes"):
+        return {
+            "user_id": "dev_admin",
+            "company_name": "dev_company",
+            "company_id": "dev_company_001",
+            "roles": ["admin"]
+        }
+
     try:
         token = credentials.credentials
         user_data = user_manager.verify_token(token)

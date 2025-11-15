@@ -37,37 +37,195 @@ SuperX is a comprehensive AI-powered forecasting platform that combines advanced
 - **Interactive Chat Interface** with contextual suggestions
 - **Real-time Analytics** with professional styling
 
-## 🚀 Quick Start
+## 🚀 Quick Start & Running Instructions
 
 ### Prerequisites
 ```bash
-Python 3.8+
-Node.js 16+ (for frontend)
+Python 3.8+ (Required)
+Node.js 16+ (Required for frontend)
+Git (Required)
 ```
 
-### Installation
+### 🔧 Complete Setup & Installation
+
+#### 1. Clone and Setup Environment
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/superx-ai-forecasting.git
 cd superx-ai-forecasting
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Run automated setup (Windows)
+python setup_dev_environment.py
 
-# Install frontend dependencies (optional)
+# Or manual setup:
+pip install -r requirements.txt
+```
+
+#### 2. Frontend Setup
+```bash
 cd frontend
-npm install
+npm install --legacy-peer-deps
 cd ..
 ```
 
-### Run the Application
+### 🚀 Running the Complete System
+
+#### Option 1: Full Stack Development (Recommended)
+
+**Terminal 1 - Backend API:**
 ```bash
-# Start the complete SuperX system
+# Start FastAPI backend server
+py -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Backend will be available at: http://localhost:8000
+# API docs at: http://localhost:8000/docs
+```
+
+**Terminal 2 - Frontend React App:**
+```bash
+cd frontend
+npm start
+
+# Frontend will be available at: http://localhost:3000
+# Automatically opens in browser
+```
+
+**Terminal 3 - AI Chat System (Optional):**
+```bash
+# Interactive terminal-based system
 python superx_final_system.py
 
-# Or run individual components
-python superx_simple_complete.py  # Simple version
-python chatbot_demo.py            # Chatbot only
+# Or simple version
+python superx_simple_complete.py
+```
+
+#### Option 2: Quick Demo/Testing
+```bash
+# All-in-one system with terminal interface
+python superx_final_system.py
+
+# Simple chatbot demo
+python chatbot_demo.py
+
+# Basic system test
+python main.py
+```
+
+#### Option 3: Windows PowerShell Script
+```powershell
+# Run the automated startup script
+.\start-dev.ps1
+```
+
+### 🌐 Access Points After Starting
+
+| Component | URL | Description |
+|-----------|-----|-------------|
+| **Frontend Dashboard** | http://localhost:3000 | Main cyberpunk UI with 3D visualizations |
+| **Backend API** | http://localhost:8000 | REST API endpoints |
+| **API Documentation** | http://localhost:8000/docs | Interactive API docs (Swagger) |
+| **WebSocket** | ws://localhost:8000/ws | Real-time data streaming |
+| **SuperX Direct Chat** | http://localhost:8000/api/v1/superx/chat | Direct AI chat endpoint |
+
+### 🔧 Development Commands
+
+```bash
+# Backend Development
+py -m uvicorn src.api.main:app --reload --port 8000  # Auto-reload on changes
+python -m pytest tests/                              # Run tests
+python -m pytest tests/ -v                          # Verbose testing
+
+# Frontend Development  
+cd frontend
+npm start                    # Development server with hot reload
+npm run build               # Production build
+npm test                    # Run frontend tests
+
+# Data & AI Components
+python generate_dummy_data.py          # Generate sample datasets
+python create_test_user.py            # Create test users
+python test_rag_personalization.py    # Test AI personalization
+```
+
+### 🛠️ System Requirements & Troubleshooting
+
+#### Minimum System Requirements
+- **OS:** Windows 10/11, macOS 10.15+, or Linux Ubuntu 18.04+
+- **Python:** 3.8 or higher (3.11 recommended)
+- **Node.js:** 16.0 or higher (18.0 recommended)
+- **RAM:** 8GB minimum (16GB recommended for AI features)
+- **Storage:** 5GB free space
+- **Network:** Internet connection for AI model downloads
+
+#### Common Issues & Solutions
+
+**🔴 Backend Won't Start:**
+```bash
+# Check Python version
+python --version  # Should be 3.8+
+
+# Install missing dependencies
+pip install -r requirements.txt
+
+# Check port availability
+netstat -an | findstr :8000  # Windows
+lsof -i :8000                # macOS/Linux
+
+# Alternative port
+py -m uvicorn src.api.main:app --reload --port 8001
+```
+
+**🔴 Frontend Won't Start:**
+```bash
+# Clear npm cache
+npm cache clean --force
+
+# Delete node_modules and reinstall
+cd frontend
+rmdir /s node_modules  # Windows
+rm -rf node_modules    # macOS/Linux
+npm install --legacy-peer-deps
+
+# Check Node.js version
+node --version  # Should be 16+
+```
+
+**🔴 AI Features Not Working:**
+```bash
+# Install AI dependencies
+pip install torch transformers sentence-transformers
+
+# Check GPU availability (optional)
+python -c "import torch; print(torch.cuda.is_available())"
+
+# Use CPU-only mode if needed
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+```
+
+**🔴 Database/Data Issues:**
+```bash
+# Reset user database
+del users.db  # Windows
+rm users.db   # macOS/Linux
+
+# Clear data cache
+rmdir /s data\processed  # Windows
+rm -rf data/processed    # macOS/Linux
+
+# Regenerate sample data
+python generate_dummy_data.py
+```
+
+#### Performance Optimization
+```bash
+# For better performance, install optional dependencies:
+pip install uvloop          # Faster event loop (Linux/macOS)
+pip install orjson          # Faster JSON processing
+pip install python-multipart # File upload optimization
+
+# Enable production mode
+export NODE_ENV=production   # Linux/macOS
+set NODE_ENV=production      # Windows
 ```
 
 ## 👥 Demo Accounts

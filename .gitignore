@@ -168,6 +168,76 @@ frontend/dist/
 ehthumbs.db
 Thumbs.db
 
+# Test files and test outputs
+test_*.py
+*_test.py
+*test*.py
+simple_test.py
+demo_working.py
+simple_integration_test.py
+test_adaptive_integration*.py
+test_weight_adaptation_system.py
+test_ensemble_engine.py
+test_api_simple.py
+test_company_sales_working.py
+test_system_working.py
+run_tests.py
+frontend/src/components/__tests__/
+frontend/coverage/
+frontend/test-results/
+frontend/.nyc_output/
+jest.config.js
+vitest.config.js
+
+# Summary and documentation files
+*_SUMMARY.md
+TASK_*_SUMMARY.md
+CYBERPUNK_AI_DASHBOARD_SUMMARY.md
+ADAPTIVE_ENSEMBLE_INTEGRATION_SUMMARY.md
+COMPANY_SALES_SYSTEM_README.md
+START_SYSTEM.md
+
+# Development and demo files
+start_*.py
+demo_*.py
+simple_*.py
+*_working.py
+
+# Cache and temporary directories
+.cache/
+.tmp/
+tmp/
+temp/
+cache/
+
+# Model artifacts and data
+models/
+*.pkl
+*.joblib
+*.h5
+*.model
+*.weights
+
+# API keys and secrets
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+secrets.json
+config.json
+api_keys.txt
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and monitoring
+*.log
+logs/
+monitoring/
+metrics/
+
 # Temporary files
 *.tmp
 *.temp

@@ -500,6 +500,169 @@ class SystemMonitor:
             logger.error(f"Error getting monitoring summary: {e}")
             return {"error": str(e)}
     
+    def get_adaptive_ensemble_metrics(self) -> Dict[str, Any]:
+        """Get adaptive ensemble monitoring metrics"""
+        try:
+            from ..models.integrated_forecasting import IntegratedForecastingEngine
+            
+            # Create engine instance to get metrics
+            engine = IntegratedForecastingEngine(adaptive_enabled=True)
+            
+            # Get adaptive status
+            adaptive_status = engine.get_adaptive_status()
+            integration_metrics = engine.get_integration_metrics()
+            
+            # Combine metrics for monitoring
+            monitoring_metrics = {
+                'adaptive_ensemble': {
+                    'enabled': adaptive_status.get('adaptive_enabled', False),
+                    'health_score': self._calculate_ensemble_health(adaptive_status),
+                    'performance_records': adaptive_status.get('performance_history_count', 0),
+                    'weight_updates': adaptive_status.get('weight_updates_count', 0),
+                    'last_update': adaptive_status.get('last_update'),
+                    'current_weights': adaptive_status.get('current_weights', {}),
+                    'total_forecasts': integration_metrics.get('total_forecasts', 0),
+                    'forecasts_with_customer_data': integration_metrics.get('forecasts_with_customer_data', 0),
+                    'average_customer_count': integration_metrics.get('average_customer_count', 0)
+                },
+                'alerts': self._check_adaptive_ensemble_alerts(adaptive_status, integration_metrics),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            return monitoring_metrics
+            
+        except ImportError:
+            return {
+                'adaptive_ensemble': {
+                    'enabled': False,
+                    'status': 'not_available',
+                    'message': 'Adaptive ensemble not installed'
+                },
+                'timestamp': datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Failed to get adaptive ensemble metrics: {e}")
+            return {
+                'adaptive_ensemble': {
+                    'enabled': False,
+                    'error': str(e)
+                },
+                'timestamp': datetime.now().isoformat()
+            }
+    
+    def _calculate_ensemble_health(self, adaptive_status: Dict[str, Any]) -> float:
+        """Calculate health score for adaptive ensemble monitoring"""
+        try:
+            if not adaptive_status.get('adaptive_enabled', False):
+                return 0.0
+            
+            health_score = 60.0  # Base score for enabled ensemble
+            
+            # Performance data availability
+            performance_count = adaptive_status.get('performance_history_count', 0)
+            if performance_count > 50:
+                health_score += 20
+            elif performance_count > 20:
+                health_score += 15
+            elif performance_count > 5:
+                health_score += 10
+            
+            # Weight update activity
+            weight_updates = adaptive_status.get('weight_updates_count', 0)
+            if weight_updates > 10:
+                health_score += 15
+            elif weight_updates > 5:
+                health_score += 10
+            elif weight_updates > 0:
+                health_score += 5
+            
+            # Recent activity check
+            last_update = adaptive_status.get('last_update')
+            if last_update:
+                try:
+                    if isinstance(last_update, str):
+                        last_update = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+                    
+                    hours_since_update = (datetime.now() - last_update).total_seconds() / 3600
+                    if hours_since_update <= 24:
+                        health_score += 5
+                    elif hours_since_update <= 168:  # 1 week
+                        health_score += 2
+                except:
+                    pass
+            
+            return min(100.0, health_score)
+            
+        except Exception as e:
+            logger.error(f"Failed to calculate ensemble health: {e}")
+            return 0.0
+    
+    def _check_adaptive_ensemble_alerts(self, adaptive_status: Dict[str, Any], 
+                                      integration_metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Check for adaptive ensemble alerts"""
+        alerts = []
+        
+        try:
+            # Check if adaptive ensemble is disabled
+            if not adaptive_status.get('adaptive_enabled', False):
+                alerts.append({
+                    'type': 'adaptive_ensemble_disabled',
+                    'severity': 'medium',
+                    'message': 'Adaptive ensemble learning is disabled',
+                    'recommendation': 'Enable adaptive features for improved forecasting'
+                })
+            
+            # Check for insufficient performance data
+            performance_count = adaptive_status.get('performance_history_count', 0)
+            if performance_count < 10 and adaptive_status.get('adaptive_enabled', False):
+                alerts.append({
+                    'type': 'insufficient_performance_data',
+                    'severity': 'low',
+                    'message': f'Only {performance_count} performance records available',
+                    'recommendation': 'Collect more performance data for better adaptation'
+                })
+            
+            # Check for stale updates
+            last_update = adaptive_status.get('last_update')
+            if last_update and adaptive_status.get('adaptive_enabled', False):
+                try:
+                    if isinstance(last_update, str):
+                        last_update = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+                    
+                    days_since_update = (datetime.now() - last_update).days
+                    if days_since_update > 14:
+                        alerts.append({
+                            'type': 'stale_adaptive_data',
+                            'severity': 'medium',
+                            'message': f'Adaptive ensemble not updated for {days_since_update} days',
+                            'recommendation': 'Update with recent actual values'
+                        })
+                except:
+                    pass
+            
+            # Check for weight imbalance
+            current_weights = adaptive_status.get('current_weights', {})
+            if current_weights:
+                weights = list(current_weights.values())
+                if weights and max(weights) > 0.9:
+                    alerts.append({
+                        'type': 'weight_imbalance',
+                        'severity': 'low',
+                        'message': 'One model dominates ensemble weights',
+                        'recommendation': 'Consider model diversity or data quality'
+                    })
+            
+        except Exception as e:
+            logger.error(f"Failed to check adaptive ensemble alerts: {e}")
+            alerts.append({
+                'type': 'monitoring_error',
+                'severity': 'high',
+                'message': f'Error monitoring adaptive ensemble: {str(e)}',
+                'recommendation': 'Check adaptive ensemble configuration'
+            })
+        
+        return alerts
+    
     def _calculate_system_status(self, metrics: List[SystemMetric], 
                                alerts: List[Alert], health_checks: List[HealthCheck]) -> str:
         """Calculate overall system status"""

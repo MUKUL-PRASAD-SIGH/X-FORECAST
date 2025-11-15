@@ -27,8 +27,7 @@ transformers>=4.35.0
 torch>=2.0.0
 xgboost>=1.7.0
 
-# Visualization & Dashboard - OPTIONAL
-streamlit>=1.28.0
+# Visualization & Dashboard - React frontend handles this
 plotly>=5.15.0
 yfinance>=0.2.0
 

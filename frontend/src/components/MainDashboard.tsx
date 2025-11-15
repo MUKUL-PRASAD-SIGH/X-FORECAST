@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { useTheme } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CyberpunkCard, 
@@ -12,6 +12,10 @@ import { CyberpunkChatInterface } from './chat/CyberpunkChatInterface';
 import { HolographicRenderer } from './3d/HolographicRenderer';
 import { LoginForm } from './auth/LoginForm';
 import { DataUpload } from './DataUpload';
+import { CompanyDetails } from './CompanyDetails';
+import { EnsembleStatus } from './EnsembleStatus';
+import { ModelMonitoringDashboard } from './ModelMonitoringDashboard';
+import { ForecastingDashboard } from './ForecastingDashboard';
 import { CyberpunkTheme } from '../theme/cyberpunkTheme';
 
 const DashboardContainer = styled.div<{ theme: CyberpunkTheme }>`
@@ -280,7 +284,7 @@ interface SystemStatus {
 }
 
 export const MainDashboard: React.FC = () => {
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState('company');
   const [loading, setLoading] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(true); // Always authenticated
@@ -338,44 +342,51 @@ export const MainDashboard: React.FC = () => {
 
   const navigationItems: NavigationItem[] = [
     {
-      id: 'dashboard',
-      label: 'Dashboard',
-      active: activeView === 'dashboard',
-      onClick: () => setActiveView('dashboard'),
+      id: 'company',
+      label: 'Company',
+      active: activeView === 'company',
+      onClick: () => setActiveView('company'),
+      badge: 'DATA',
+    },
+    {
+      id: 'models',
+      label: 'Model Status',
+      active: activeView === 'models',
+      onClick: () => setActiveView('models'),
+      badge: '5',
     },
     {
       id: 'forecasting',
-      label: 'AI Forecasting',
+      label: 'Forecasting',
+      active: activeView === 'forecasting',
       onClick: () => setActiveView('forecasting'),
       badge: metrics.activeAlerts > 0 ? metrics.activeAlerts.toString() : undefined,
     },
     {
-      id: 'retention',
-      label: 'Customer Analytics',
-      onClick: () => setActiveView('retention'),
+      id: 'analytics',
+      label: 'Analytics',
+      active: activeView === 'analytics',
+      onClick: () => setActiveView('analytics'),
       badge: `${Math.floor(metrics.retentionRate * 100)}%`,
     },
     {
       id: 'insights',
       label: 'AI Insights',
+      active: activeView === 'insights',
       onClick: () => setActiveView('insights'),
       badge: 'LIVE',
     },
     {
       id: 'health',
       label: 'System Health',
+      active: activeView === 'health',
       onClick: () => setActiveView('health'),
       badge: systemStatus.status === 'excellent' ? '✓' : '!',
     },
     {
-      id: 'upload',
-      label: 'Upload Data',
-      onClick: () => setActiveView('upload'),
-      badge: 'TRAIN',
-    },
-    {
       id: 'chatbot',
       label: 'AI Assistant',
+      active: chatOpen,
       onClick: () => setChatOpen(true),
       badge: 'AI',
     },
@@ -402,163 +413,97 @@ export const MainDashboard: React.FC = () => {
     }, 2000);
   };
 
-  const renderDashboardContent = () => (
-    <>
-      <MetricsGrid>
-        <MetricCard
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-        >
-          <div className="metric-label">Total Customers</div>
-          <div className="metric-value">{metrics.totalCustomers.toLocaleString()}</div>
-          <div className="metric-change positive">↗ +2.3% from last month</div>
-        </MetricCard>
+  const renderCompanyContent = () => {
+    return (
+      <>
+        <CompanyDetails 
+          metrics={{
+            totalCustomers: metrics.totalCustomers,
+            retentionRate: metrics.retentionRate,
+            revenueGrowth: metrics.revenueGrowth,
+            forecastAccuracy: metrics.forecastAccuracy,
+            systemHealth: metrics.systemHealth,
+            activeAlerts: metrics.activeAlerts
+          }}
+          companyName={user?.company_name || 'Your Company'}
+        />
 
-        <MetricCard
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.7 }}
-        >
-          <div className="metric-label">Retention Rate</div>
-          <div className="metric-value">{(metrics.retentionRate * 100).toFixed(1)}%</div>
-          <div className="metric-change positive">↗ +1.2% from last week</div>
-        </MetricCard>
+        {/* Integrated Data Upload Section */}
+        <DataUpload 
+          authToken={authToken!} 
+          onUploadComplete={(result) => {
+            console.log('Data uploaded successfully:', result);
+            // Automatically switch to models view to show ensemble status
+            if (result.success && result.models_initialized) {
+              setTimeout(() => setActiveView('models'), 2000);
+            }
+          }} 
+        />
 
-        <MetricCard
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.8 }}
-        >
-          <div className="metric-label">Forecast Accuracy</div>
-          <div className="metric-value">{(metrics.forecastAccuracy * 100).toFixed(1)}%</div>
-          <div className="metric-change positive">↗ +0.8% improvement</div>
-        </MetricCard>
+        {/* Ensemble Status Section */}
+        <EnsembleStatus authToken={authToken!} />
+  
+        <ContentGrid>
+          <DemoCard variant="glass" hover>
+            <CardTitle>🔮 Generate Forecasts</CardTitle>
+            <CardDescription>
+              Generate adaptive ensemble forecasts with confidence intervals (P10/P50/P90). 
+              System automatically updates model weights based on performance.
+            </CardDescription>
+            <CyberpunkButton
+              variant="primary"
+              onClick={() => setActiveView('forecasting')}
+            >
+              Generate Forecast
+            </CyberpunkButton>
+          </DemoCard>
+  
+          <DemoCard variant="neon" hover>
+            <CardTitle>📈 Performance Analytics</CardTitle>
+            <CardDescription>
+              Analyze model performance evolution, weight changes over time, 
+              and forecast accuracy metrics with detailed visualizations.
+            </CardDescription>
+            <CyberpunkButton
+              variant="secondary"
+              onClick={() => setActiveView('analytics')}
+            >
+              View Analytics
+            </CyberpunkButton>
+          </DemoCard>
 
-        <MetricCard
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.9 }}
-        >
-          <div className="metric-label">System Health</div>
-          <div className="metric-value">{(metrics.systemHealth * 100).toFixed(0)}%</div>
-          <div className="metric-change positive">↗ All systems optimal</div>
-        </MetricCard>
+          <DemoCard variant="hologram" hover>
+            <CardTitle>🧠 AI Insights Engine</CardTitle>
+            <CardDescription>
+              Automated business insight generation with anomaly detection and pattern recognition.
+            </CardDescription>
+            <CyberpunkButton
+              variant="primary"
+              onClick={() => setActiveView('insights')}
+            >
+              Generate Insights
+            </CyberpunkButton>
+          </DemoCard>
 
-        <MetricCard
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 1.0 }}
-        >
-          <div className="metric-label">Active Alerts</div>
-          <div className="metric-value">{metrics.activeAlerts}</div>
-          <div className="metric-change positive">↓ -2 resolved today</div>
-        </MetricCard>
-
-        <MetricCard
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 1.1 }}
-        >
-          <div className="metric-label">Revenue Growth</div>
-          <div className="metric-value">{(metrics.revenueGrowth * 100).toFixed(1)}%</div>
-          <div className="metric-change positive">↗ +5.2% this quarter</div>
-        </MetricCard>
-      </MetricsGrid>
-
-      <ContentGrid>
-        <DemoCard variant="neon" hover>
-          <CardTitle>🤖 AI Forecasting Engine</CardTitle>
-          <CardDescription>
-            Advanced ensemble models combining ARIMA, ETS, and deep learning 
-            for accurate demand predictions with customer behavior integration.
-          </CardDescription>
-          <CyberpunkButton
-            variant="primary"
-            onClick={() => setActiveView('forecasting')}
-          >
-            Launch Forecasting
-          </CyberpunkButton>
-        </DemoCard>
-
-        <DemoCard variant="hologram" hover>
-          <CardTitle>👥 Customer Retention Analytics</CardTitle>
-          <CardDescription>
-            Comprehensive churn prediction, cohort analysis, and lifetime value 
-            calculations integrated with demand forecasting models.
-          </CardDescription>
-          <CyberpunkButton
-            variant="secondary"
-            onClick={() => setActiveView('retention')}
-          >
-            Analyze Customers
-          </CyberpunkButton>
-        </DemoCard>
-
-        <DemoCard variant="glass" hover>
-          <CardTitle>🧠 AI Chatbot Assistant</CardTitle>
-          <CardDescription>
-            Natural language interface for querying forecasts, getting insights, 
-            and exploring business data with conversational AI.
-          </CardDescription>
-          <CyberpunkButton
-            variant="primary"
-            onClick={() => setChatOpen(true)}
-          >
-            Start Conversation
-          </CyberpunkButton>
-        </DemoCard>
-
-        <DemoCard variant="neon" hover>
-          <CardTitle>📊 Upload Business Data</CardTitle>
-          <CardDescription>
-            Upload your sales data (CSV/Excel) to train personalized AI models 
-            and get insights specific to your business.
-          </CardDescription>
-          <CyberpunkButton
-            variant="secondary"
-            onClick={() => setActiveView('upload')}
-          >
-            Upload Data
-          </CyberpunkButton>
-        </DemoCard>
-      </ContentGrid>
-    </>
-  );
+          <DemoCard variant="glass" hover>
+            <CardTitle>⚡ System Health</CardTitle>
+            <CardDescription>
+              Real-time system monitoring with predictive maintenance and performance metrics.
+            </CardDescription>
+            <CyberpunkButton
+              variant="secondary"
+              onClick={() => setActiveView('health')}
+            >
+              View System Health
+            </CyberpunkButton>
+          </DemoCard>
+        </ContentGrid>
+      </>
+    );
+  };
 
   const renderForecastingContent = () => (
-    <ContentGrid>
-      <DemoCard variant="neon" hover>
-        <CardTitle>📊 Demand Forecasting</CardTitle>
-        <CardDescription>
-          Multi-horizon forecasts with P10/P50/P90 confidence intervals.
-          Current accuracy: {(metrics.forecastAccuracy * 100).toFixed(1)}%
-        </CardDescription>
-        <CyberpunkButton variant="primary" onClick={() => handleDemoAction('demand-forecast')}>
-          Generate Forecast
-        </CyberpunkButton>
-      </DemoCard>
-
-      <DemoCard variant="hologram" hover>
-        <CardTitle>🎆 NPI Forecasting</CardTitle>
-        <CardDescription>
-          New Product Introduction forecasting using similarity matching and Bayesian methods.
-        </CardDescription>
-        <CyberpunkButton variant="secondary" onClick={() => handleDemoAction('npi-forecast')}>
-          Launch NPI Model
-        </CyberpunkButton>
-      </DemoCard>
-
-      <DemoCard variant="glass" hover>
-        <CardTitle>🎉 Promotion Analytics</CardTitle>
-        <CardDescription>
-          Uplift modeling and promotion optimization with cannibalization effects.
-        </CardDescription>
-        <CyberpunkButton variant="primary" onClick={() => handleDemoAction('promotion-analytics')}>
-          Optimize Promotions
-        </CyberpunkButton>
-      </DemoCard>
-    </ContentGrid>
+    <ForecastingDashboard authToken={authToken!} />
   );
 
   const renderRetentionContent = () => (
@@ -736,17 +681,7 @@ export const MainDashboard: React.FC = () => {
 
       {/* Tab Content */}
       <AnimatePresence mode="wait">
-        {activeView === 'dashboard' && (
-          <motion.div
-            key="dashboard"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            {renderDashboardContent()}
-          </motion.div>
-        )}
+
         
         {activeView === 'forecasting' && (
           <motion.div
@@ -796,21 +731,28 @@ export const MainDashboard: React.FC = () => {
           </motion.div>
         )}
         
-        {activeView === 'upload' && (
+        {activeView === 'models' && (
           <motion.div
-            key="upload"
+            key="models"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            <DataUpload 
-              authToken={authToken!} 
-              onUploadComplete={() => {
-                // Refresh data or show success message
-                console.log('Data uploaded successfully');
-              }} 
-            />
+            <EnsembleStatus authToken={authToken!} />
+            <ModelMonitoringDashboard authToken={authToken!} />
+          </motion.div>
+        )}
+        
+        {activeView === 'company' && (
+          <motion.div
+            key="company"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderCompanyContent()}
           </motion.div>
         )}
       </AnimatePresence>
@@ -900,7 +842,7 @@ export const MainDashboard: React.FC = () => {
             onSendMessage={async (message: string) => {
               // Integrate with backend API
               try {
-                const response = await fetch('http://localhost:8000/api/v1/auth/chat', {
+                const response = await fetch('http://localhost:8000/api/company-sales/chat', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',

@@ -215,13 +215,17 @@
   - _Requirements: 6.1, 6.4_
 
 
-- [ ] 6.2 Implement specialized intermittent demand forecasting
+- [x] 6.2 Implement specialized intermittent demand forecasting
+
+
+
   - Add Croston's method implementation for intermittent demand forecasting
   - Implement TSB (Teunter-Syntetos-Babai) method for improved intermittent forecasting
 
 
   - Create method selection logic based on demand pattern characteristics
   - _Requirements: 6.2, 6.3_
+
 
 
 - [ ] 6.3 Create hierarchical borrowing and pooling system

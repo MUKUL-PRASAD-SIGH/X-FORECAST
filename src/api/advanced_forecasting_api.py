@@ -17,6 +17,7 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 import jwt
+import os
 from passlib.context import CryptContext
 
 # Import all system components
@@ -34,8 +35,11 @@ logger = logging.getLogger(__name__)
 # Security setup
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = "your-secret-key-here"  # In production, use environment variable
+# Load secret from environment (or use placeholder for local dev)
+SECRET_KEY = os.environ.get("JWT_SECRET", "your-secret-key-here")
 ALGORITHM = "HS256"
+# Toggle to disable auth checks when running locally: set DISABLE_AUTH=1 or DISABLE_AUTH=true
+AUTH_DISABLED = str(os.environ.get("DISABLE_AUTH", "0"))
 
 # Pydantic models for API requests/responses
 class ForecastRequest(BaseModel):
@@ -99,7 +103,11 @@ class UserRole(BaseModel):
 
 # Authentication and authorization
 async def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """Verify JWT token"""
+    """Verify JWT token. When DISABLE_AUTH is set (local dev), bypass verification and return a dev user id."""
+    if AUTH_DISABLED.lower() in ("1", "true", "yes"):
+        # Bypass auth in development/test environments
+        return "dev_admin"
+
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")

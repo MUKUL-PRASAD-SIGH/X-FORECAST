@@ -29,6 +29,7 @@ class DatasetInfo:
     data_types: Dict[str, str]
     summary_stats: Dict[str, Any]
     sample_data: List[Dict[str, Any]]
+    insights: List[str]
     suggested_questions: List[str]
 
 class CSVKnowledgeBase:
@@ -36,24 +37,23 @@ class CSVKnowledgeBase:
     Persistent CSV Knowledge Base with RAG capabilities
     """
     
-    def __init__(self, storage_dir: str = "data/knowledge_base"):
-        self.storage_dir = Path(storage_dir)
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, data_dir: str = "data/knowledge_base"):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize SQLite database for metadata
-        self.db_path = self.storage_dir / "knowledge_base.db"
+        self.db_path = self.data_dir / "knowledge_base.db"
         self.init_database()
         
-        # In-memory cache for quick access
+        # In-memory cache for fast access
         self.datasets_cache = {}
         self.load_datasets_cache()
     
     def init_database(self):
-        """Initialize SQLite database for persistent storage"""
+        """Initialize SQLite database for metadata storage"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Create datasets table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS datasets (
                 dataset_id TEXT PRIMARY KEY,
@@ -65,14 +65,20 @@ class CSVKnowledgeBase:
                 data_types TEXT NOT NULL,
                 summary_stats TEXT NOT NULL,
                 sample_data TEXT NOT NULL,
+                insights TEXT NOT NULL,
                 suggested_questions TEXT NOT NULL
             )
         ''')
         
-        # Create user_datasets index
         cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_user_datasets 
-            ON datasets(user_id)
+            CREATE TABLE IF NOT EXISTS user_queries (
+                query_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                query_text TEXT NOT NULL,
+                query_date TEXT NOT NULL,
+                datasets_used TEXT NOT NULL,
+                response TEXT NOT NULL
+            )
         ''')
         
         conn.commit()
@@ -96,12 +102,13 @@ class CSVKnowledgeBase:
                 filename=filename or os.path.basename(csv_file_path)
             )
             
-            # Save dataset file
-            dataset_file_path = self.storage_dir / f"{dataset_id}.csv"
-            df.to_csv(dataset_file_path, index=False)
+            # Save dataset to persistent storage
+            dataset_file = self.data_dir / f"{dataset_id}.pkl"
+            with open(dataset_file, 'wb') as f:
+                pickle.dump(df, f)
             
-            # Save to database
-            self._save_dataset_to_db(dataset_info)
+            # Save metadata to database
+            self._save_dataset_metadata(dataset_info)
             
             # Update cache
             self.datasets_cache[dataset_id] = dataset_info
@@ -114,7 +121,7 @@ class CSVKnowledgeBase:
             raise
     
     def _analyze_dataset(self, dataset_id: str, user_id: str, df: pd.DataFrame, filename: str) -> DatasetInfo:
-        """Analyze dataset and extract metadata"""
+        """Analyze dataset and extract insights"""
         
         # Basic info
         columns = df.columns.tolist()
@@ -126,22 +133,24 @@ class CSVKnowledgeBase:
         for col in columns:
             if df[col].dtype in ['int64', 'float64']:
                 summary_stats[col] = {
-                    'type': 'numeric',
-                    'min': float(df[col].min()),
-                    'max': float(df[col].max()),
-                    'mean': float(df[col].mean()),
-                    'std': float(df[col].std()) if df[col].std() == df[col].std() else 0.0  # Handle NaN
+                    'mean': float(df[col].mean()) if not df[col].isna().all() else None,
+                    'std': float(df[col].std()) if not df[col].isna().all() else None,
+                    'min': float(df[col].min()) if not df[col].isna().all() else None,
+                    'max': float(df[col].max()) if not df[col].isna().all() else None,
+                    'missing_count': int(df[col].isna().sum())
                 }
             else:
-                unique_values = df[col].unique()
                 summary_stats[col] = {
-                    'type': 'categorical',
-                    'unique_count': len(unique_values),
-                    'top_values': unique_values[:10].tolist() if len(unique_values) > 0 else []
+                    'unique_count': int(df[col].nunique()),
+                    'most_common': str(df[col].mode().iloc[0]) if len(df[col].mode()) > 0 else None,
+                    'missing_count': int(df[col].isna().sum())
                 }
         
         # Sample data (first 5 rows)
         sample_data = df.head(5).to_dict('records')
+        
+        # Generate insights
+        insights = self._generate_insights(df, columns, summary_stats)
         
         # Generate suggested questions
         suggested_questions = self._generate_suggested_questions(df, columns, summary_stats)
@@ -156,96 +165,152 @@ class CSVKnowledgeBase:
             data_types=data_types,
             summary_stats=summary_stats,
             sample_data=sample_data,
+            insights=insights,
             suggested_questions=suggested_questions
         )
     
-    def _generate_suggested_questions(self, df: pd.DataFrame, columns: List[str], 
-                                    summary_stats: Dict[str, Any]) -> List[str]:
-        """Generate intelligent suggested questions based on data"""
+    def _generate_insights(self, df: pd.DataFrame, columns: List[str], summary_stats: Dict) -> List[str]:
+        """Generate insights from dataset"""
+        
+        insights = []
+        
+        # Data quality insights
+        total_missing = sum(stats.get('missing_count', 0) for stats in summary_stats.values())
+        if total_missing > 0:
+            missing_pct = (total_missing / (len(df) * len(columns))) * 100
+            insights.append(f"Dataset has {missing_pct:.1f}% missing values")
+        
+        # Numeric columns insights
+        numeric_cols = [col for col in columns if df[col].dtype in ['int64', 'float64']]
+        if numeric_cols:
+            insights.append(f"Found {len(numeric_cols)} numeric columns for analysis")
+            
+            # Check for potential outliers
+            for col in numeric_cols[:3]:  # Check first 3 numeric columns
+                if col in summary_stats and summary_stats[col]['std']:
+                    mean = summary_stats[col]['mean']
+                    std = summary_stats[col]['std']
+                    outliers = df[(df[col] < mean - 3*std) | (df[col] > mean + 3*std)]
+                    if len(outliers) > 0:
+                        insights.append(f"Column '{col}' has {len(outliers)} potential outliers")
+        
+        # Categorical columns insights
+        categorical_cols = [col for col in columns if df[col].dtype == 'object']
+        if categorical_cols:
+            insights.append(f"Found {len(categorical_cols)} categorical columns")
+            
+            # Check for high cardinality
+            for col in categorical_cols[:3]:
+                unique_count = summary_stats[col]['unique_count']
+                if unique_count > len(df) * 0.8:
+                    insights.append(f"Column '{col}' has high cardinality ({unique_count} unique values)")
+        
+        # Date columns insights
+        date_cols = []
+        for col in columns:
+            if 'date' in col.lower() or 'time' in col.lower():
+                try:
+                    pd.to_datetime(df[col])
+                    date_cols.append(col)
+                except:
+                    pass
+        
+        if date_cols:
+            insights.append(f"Found {len(date_cols)} potential date columns for time series analysis")
+        
+        # Size insights
+        if len(df) > 10000:
+            insights.append("Large dataset suitable for machine learning models")
+        elif len(df) > 1000:
+            insights.append("Medium-sized dataset good for statistical analysis")
+        else:
+            insights.append("Small dataset suitable for exploratory analysis")
+        
+        return insights
+    
+    def _generate_suggested_questions(self, df: pd.DataFrame, columns: List[str], summary_stats: Dict) -> List[str]:
+        """Generate suggested questions based on dataset content"""
         
         questions = []
         
-        # Date-based questions
-        date_columns = [col for col in columns if 'date' in col.lower() or 'time' in col.lower()]
-        if date_columns:
-            questions.extend([
-                f"What's the trend over time for {date_columns[0]}?",
-                f"Show me monthly patterns in the data",
-                f"What happened in the latest period?"
-            ])
+        # Generic questions
+        questions.extend([
+            "What are the key insights from this data?",
+            "Show me a summary of the dataset",
+            "What columns have the most missing values?"
+        ])
         
-        # Numeric columns questions
-        numeric_columns = [col for col, stats in summary_stats.items() if stats['type'] == 'numeric']
-        if numeric_columns:
-            for col in numeric_columns[:3]:  # Top 3 numeric columns
+        # Numeric column questions
+        numeric_cols = [col for col in columns if df[col].dtype in ['int64', 'float64']]
+        if numeric_cols:
+            for col in numeric_cols[:3]:
                 questions.extend([
-                    f"What's the average {col}?",
+                    f"What is the distribution of {col}?",
+                    f"Show me statistics for {col}",
+                    f"Are there any outliers in {col}?"
+                ])
+        
+        # Categorical column questions
+        categorical_cols = [col for col in columns if df[col].dtype == 'object']
+        if categorical_cols:
+            for col in categorical_cols[:3]:
+                questions.extend([
+                    f"What are the most common values in {col}?",
                     f"Show me the distribution of {col}",
-                    f"What are the top values for {col}?"
+                    f"How many unique values are in {col}?"
                 ])
         
-        # Categorical columns questions
-        categorical_columns = [col for col, stats in summary_stats.items() if stats['type'] == 'categorical']
-        if categorical_columns:
-            for col in categorical_columns[:2]:  # Top 2 categorical columns
-                questions.extend([
-                    f"What are the most common {col} values?",
-                    f"How many unique {col} are there?",
-                    f"Show me breakdown by {col}"
-                ])
+        # Date-based questions
+        date_cols = []
+        for col in columns:
+            if 'date' in col.lower() or 'time' in col.lower():
+                try:
+                    pd.to_datetime(df[col])
+                    date_cols.append(col)
+                    questions.extend([
+                        f"Show me trends over time using {col}",
+                        f"What is the date range in {col}?",
+                        f"Can you forecast future values based on {col}?"
+                    ])
+                except:
+                    pass
+        
+        # Relationship questions
+        if len(numeric_cols) >= 2:
+            questions.extend([
+                f"What is the correlation between {numeric_cols[0]} and {numeric_cols[1]}?",
+                "Show me correlations between numeric columns",
+                "Which variables are most strongly related?"
+            ])
         
         # Business-specific questions based on column names
-        business_questions = []
+        business_keywords = {
+            'sales': ["What are the total sales?", "Show me sales trends", "Which products have highest sales?"],
+            'revenue': ["What is the total revenue?", "Show me revenue by category", "What drives revenue growth?"],
+            'price': ["What is the average price?", "Show me price distribution", "How does price affect sales?"],
+            'quantity': ["What is the total quantity sold?", "Show me quantity trends", "Which items sell most?"],
+            'customer': ["How many unique customers?", "Show me customer segments", "What is customer behavior?"],
+            'product': ["How many products?", "Which products are popular?", "Show me product performance"],
+            'inventory': ["What is the inventory level?", "Show me stock analysis", "Which items are low in stock?"]
+        }
         
-        # Sales/Revenue related
-        if any(word in ' '.join(columns).lower() for word in ['sales', 'revenue', 'amount', 'price']):
-            business_questions.extend([
-                "What's our total revenue?",
-                "Which products/categories perform best?",
-                "What's the sales trend?"
-            ])
+        for keyword, keyword_questions in business_keywords.items():
+            if any(keyword in col.lower() for col in columns):
+                questions.extend(keyword_questions[:2])  # Add first 2 questions for each keyword
         
-        # Customer related
-        if any(word in ' '.join(columns).lower() for word in ['customer', 'client', 'user']):
-            business_questions.extend([
-                "How many customers do we have?",
-                "What's the customer distribution?",
-                "Who are our top customers?"
-            ])
-        
-        # Product related
-        if any(word in ' '.join(columns).lower() for word in ['product', 'item', 'sku']):
-            business_questions.extend([
-                "What are our top-selling products?",
-                "How many products do we have?",
-                "Which products need attention?"
-            ])
-        
-        # Inventory related
-        if any(word in ' '.join(columns).lower() for word in ['stock', 'inventory', 'quantity']):
-            business_questions.extend([
-                "What's our current stock level?",
-                "Which items are low in stock?",
-                "What's the inventory turnover?"
-            ])
-        
-        questions.extend(business_questions)
-        
-        # Remove duplicates and limit to 15 questions
-        unique_questions = list(dict.fromkeys(questions))[:15]
-        
-        return unique_questions
+        return questions[:15]  # Return top 15 questions
     
-    def _save_dataset_to_db(self, dataset_info: DatasetInfo):
-        """Save dataset info to SQLite database"""
+    def _save_dataset_metadata(self, dataset_info: DatasetInfo):
+        """Save dataset metadata to database"""
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
             INSERT OR REPLACE INTO datasets 
             (dataset_id, user_id, filename, upload_date, columns, row_count, 
-             data_types, summary_stats, sample_data, suggested_questions)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             data_types, summary_stats, sample_data, insights, suggested_questions)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             dataset_info.dataset_id,
             dataset_info.user_id,
@@ -256,6 +321,7 @@ class CSVKnowledgeBase:
             json.dumps(dataset_info.data_types),
             json.dumps(dataset_info.summary_stats),
             json.dumps(dataset_info.sample_data),
+            json.dumps(dataset_info.insights),
             json.dumps(dataset_info.suggested_questions)
         ))
         
@@ -263,442 +329,228 @@ class CSVKnowledgeBase:
         conn.close()
     
     def load_datasets_cache(self):
-        """Load all datasets into memory cache"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        """Load all datasets metadata into cache"""
         
-        cursor.execute('SELECT * FROM datasets')
-        rows = cursor.fetchall()
-        
-        for row in rows:
-            dataset_info = DatasetInfo(
-                dataset_id=row[0],
-                user_id=row[1],
-                filename=row[2],
-                upload_date=datetime.fromisoformat(row[3]),
-                columns=json.loads(row[4]),
-                row_count=row[5],
-                data_types=json.loads(row[6]),
-                summary_stats=json.loads(row[7]),
-                sample_data=json.loads(row[8]),
-                suggested_questions=json.loads(row[9])
-            )
-            self.datasets_cache[dataset_info.dataset_id] = dataset_info
-        
-        conn.close()
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT * FROM datasets')
+            rows = cursor.fetchall()
+            
+            for row in rows:
+                dataset_info = DatasetInfo(
+                    dataset_id=row[0],
+                    user_id=row[1],
+                    filename=row[2],
+                    upload_date=datetime.fromisoformat(row[3]),
+                    columns=json.loads(row[4]),
+                    row_count=row[5],
+                    data_types=json.loads(row[6]),
+                    summary_stats=json.loads(row[7]),
+                    sample_data=json.loads(row[8]),
+                    insights=json.loads(row[9]),
+                    suggested_questions=json.loads(row[10])
+                )
+                self.datasets_cache[dataset_info.dataset_id] = dataset_info
+            
+            conn.close()
+            logger.info(f"Loaded {len(self.datasets_cache)} datasets into cache")
+            
+        except Exception as e:
+            logger.error(f"Failed to load datasets cache: {e}")
     
     def get_user_datasets(self, user_id: str) -> List[DatasetInfo]:
         """Get all datasets for a user"""
-        return [
-            dataset for dataset in self.datasets_cache.values()
-            if dataset.user_id == user_id
-        ]
+        return [info for info in self.datasets_cache.values() if info.user_id == user_id]
     
-    def get_dataset(self, dataset_id: str) -> Optional[DatasetInfo]:
-        """Get specific dataset info"""
-        return self.datasets_cache.get(dataset_id)
-    
-    def load_dataset_data(self, dataset_id: str) -> Optional[pd.DataFrame]:
-        """Load actual CSV data for a dataset"""
-        dataset_file_path = self.storage_dir / f"{dataset_id}.csv"
-        if dataset_file_path.exists():
-            return pd.read_csv(dataset_file_path)
+    def get_dataset(self, dataset_id: str) -> Optional[pd.DataFrame]:
+        """Load dataset from storage"""
+        
+        dataset_file = self.data_dir / f"{dataset_id}.pkl"
+        if dataset_file.exists():
+            try:
+                with open(dataset_file, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load dataset {dataset_id}: {e}")
+        
         return None
     
-    def query_data(self, user_id: str, query: str) -> Dict[str, Any]:
-        """Query user's data using natural language"""
+    def query_datasets(self, user_id: str, query: str) -> Dict[str, Any]:
+        """Query user's datasets using natural language"""
         
         user_datasets = self.get_user_datasets(user_id)
         if not user_datasets:
             return {
                 "success": False,
                 "message": "No datasets found. Please upload some data first.",
-                "suggestions": ["Upload your CSV data to get started!"]
+                "results": []
             }
         
-        # Find most relevant dataset
-        relevant_dataset = self._find_relevant_dataset(query, user_datasets)
+        # Simple keyword-based matching for now
+        # In production, use more sophisticated NLP/embedding-based matching
+        query_lower = query.lower()
         
-        if not relevant_dataset:
+        results = []
+        
+        for dataset_info in user_datasets:
+            # Check if query matches column names
+            matching_columns = [col for col in dataset_info.columns if col.lower() in query_lower]
+            
+            if matching_columns:
+                # Load actual dataset
+                df = self.get_dataset(dataset_info.dataset_id)
+                if df is not None:
+                    result = self._analyze_query_on_dataset(query, df, dataset_info, matching_columns)
+                    results.append(result)
+        
+        if not results:
+            # Provide suggestions based on available data
+            all_suggestions = []
+            for dataset_info in user_datasets:
+                all_suggestions.extend(dataset_info.suggested_questions)
+            
             return {
                 "success": False,
-                "message": "Couldn't find relevant data for your query.",
-                "suggestions": self._get_all_suggestions(user_datasets)
+                "message": "No direct matches found in your data.",
+                "suggestions": all_suggestions[:10],
+                "available_datasets": [
+                    {
+                        "filename": info.filename,
+                        "columns": info.columns,
+                        "row_count": info.row_count
+                    }
+                    for info in user_datasets
+                ]
             }
         
-        # Load dataset
-        df = self.load_dataset_data(relevant_dataset.dataset_id)
-        if df is None:
-            return {
-                "success": False,
-                "message": "Dataset file not found.",
-                "suggestions": []
-            }
+        return {
+            "success": True,
+            "message": f"Found {len(results)} relevant results",
+            "results": results
+        }
+    
+    def _analyze_query_on_dataset(self, query: str, df: pd.DataFrame, 
+                                 dataset_info: DatasetInfo, matching_columns: List[str]) -> Dict[str, Any]:
+        """Analyze query on specific dataset"""
         
-        # Process query
-        result = self._process_query(query, df, relevant_dataset)
+        query_lower = query.lower()
+        result = {
+            "dataset": dataset_info.filename,
+            "matching_columns": matching_columns,
+            "analysis": {}
+        }
+        
+        # Statistical queries
+        if any(word in query_lower for word in ['average', 'mean', 'avg']):
+            for col in matching_columns:
+                if df[col].dtype in ['int64', 'float64']:
+                    result["analysis"][f"average_{col}"] = float(df[col].mean())
+        
+        if any(word in query_lower for word in ['sum', 'total']):
+            for col in matching_columns:
+                if df[col].dtype in ['int64', 'float64']:
+                    result["analysis"][f"total_{col}"] = float(df[col].sum())
+        
+        if any(word in query_lower for word in ['max', 'maximum', 'highest']):
+            for col in matching_columns:
+                if df[col].dtype in ['int64', 'float64']:
+                    result["analysis"][f"max_{col}"] = float(df[col].max())
+        
+        if any(word in query_lower for word in ['min', 'minimum', 'lowest']):
+            for col in matching_columns:
+                if df[col].dtype in ['int64', 'float64']:
+                    result["analysis"][f"min_{col}"] = float(df[col].min())
+        
+        # Distribution queries
+        if any(word in query_lower for word in ['distribution', 'count', 'frequency']):
+            for col in matching_columns:
+                if df[col].dtype == 'object':
+                    value_counts = df[col].value_counts().head(5)
+                    result["analysis"][f"top_values_{col}"] = value_counts.to_dict()
+        
+        # Trend queries
+        if any(word in query_lower for word in ['trend', 'over time', 'time series']):
+            date_cols = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
+            if date_cols and matching_columns:
+                date_col = date_cols[0]
+                try:
+                    df_temp = df.copy()
+                    df_temp[date_col] = pd.to_datetime(df_temp[date_col])
+                    df_temp = df_temp.sort_values(date_col)
+                    
+                    for col in matching_columns:
+                        if df[col].dtype in ['int64', 'float64']:
+                            # Simple trend analysis
+                            recent_avg = df_temp[col].tail(10).mean()
+                            older_avg = df_temp[col].head(10).mean()
+                            trend = "increasing" if recent_avg > older_avg else "decreasing"
+                            result["analysis"][f"trend_{col}"] = {
+                                "direction": trend,
+                                "recent_average": float(recent_avg),
+                                "older_average": float(older_avg)
+                            }
+                except:
+                    pass
         
         return result
     
-    def _find_relevant_dataset(self, query: str, datasets: List[DatasetInfo]) -> Optional[DatasetInfo]:
-        """Find most relevant dataset for the query"""
+    def get_all_suggestions(self, user_id: str) -> List[str]:
+        """Get all suggested questions for user's datasets"""
         
-        query_lower = query.lower()
-        
-        # Score datasets based on column name matches
-        best_score = 0
-        best_dataset = None
-        
-        for dataset in datasets:
-            score = 0
-            
-            # Check column names
-            for col in dataset.columns:
-                if col.lower() in query_lower:
-                    score += 2
-                
-                # Check for partial matches
-                col_words = col.lower().split('_')
-                for word in col_words:
-                    if word in query_lower:
-                        score += 1
-            
-            # Check filename
-            if dataset.filename.lower().replace('.csv', '') in query_lower:
-                score += 3
-            
-            if score > best_score:
-                best_score = score
-                best_dataset = dataset
-        
-        # If no good match, return the most recent dataset
-        if best_score == 0 and datasets:
-            return max(datasets, key=lambda d: d.upload_date)
-        
-        return best_dataset
-    
-    def _process_query(self, query: str, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Process natural language query against dataset"""
-        
-        query_lower = query.lower()
-        
-        try:
-            # Summary queries
-            if any(word in query_lower for word in ['summary', 'overview', 'describe']):
-                return self._generate_summary(df, dataset_info)
-            
-            # Count queries
-            if any(word in query_lower for word in ['count', 'how many', 'total']):
-                return self._handle_count_query(query_lower, df, dataset_info)
-            
-            # Average/mean queries
-            if any(word in query_lower for word in ['average', 'mean', 'avg']):
-                return self._handle_average_query(query_lower, df, dataset_info)
-            
-            # Top/maximum queries
-            if any(word in query_lower for word in ['top', 'highest', 'maximum', 'max', 'best']):
-                return self._handle_top_query(query_lower, df, dataset_info)
-            
-            # Trend queries
-            if any(word in query_lower for word in ['trend', 'over time', 'pattern', 'change']):
-                return self._handle_trend_query(query_lower, df, dataset_info)
-            
-            # Distribution queries
-            if any(word in query_lower for word in ['distribution', 'breakdown', 'split']):
-                return self._handle_distribution_query(query_lower, df, dataset_info)
-            
-            # Default: return basic info
-            return self._generate_basic_info(df, dataset_info)
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error processing query: {str(e)}",
-                "suggestions": dataset_info.suggested_questions[:5]
-            }
-    
-    def _generate_summary(self, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Generate dataset summary"""
-        
-        summary = {
-            "success": True,
-            "message": f"📊 **Dataset Summary: {dataset_info.filename}**",
-            "data": {
-                "total_records": len(df),
-                "columns": len(df.columns),
-                "date_range": None,
-                "key_insights": []
-            },
-            "suggestions": dataset_info.suggested_questions[:5]
-        }
-        
-        # Add date range if available
-        date_columns = [col for col in df.columns if 'date' in col.lower()]
-        if date_columns:
-            try:
-                date_col = date_columns[0]
-                df[date_col] = pd.to_datetime(df[date_col])
-                summary["data"]["date_range"] = {
-                    "start": df[date_col].min().strftime('%Y-%m-%d'),
-                    "end": df[date_col].max().strftime('%Y-%m-%d')
-                }
-            except:
-                pass
-        
-        # Key insights
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        if len(numeric_cols) > 0:
-            for col in numeric_cols[:3]:
-                summary["data"]["key_insights"].append(
-                    f"{col}: avg {df[col].mean():.2f}, max {df[col].max():.2f}"
-                )
-        
-        return summary
-    
-    def _handle_count_query(self, query: str, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Handle count-related queries"""
-        
-        # Find relevant column
-        for col in df.columns:
-            if col.lower() in query:
-                if df[col].dtype == 'object':
-                    unique_count = df[col].nunique()
-                    return {
-                        "success": True,
-                        "message": f"📊 **Count Analysis for {col}**",
-                        "data": {
-                            "unique_values": unique_count,
-                            "total_records": len(df),
-                            "top_values": df[col].value_counts().head().to_dict()
-                        },
-                        "suggestions": dataset_info.suggested_questions[:5]
-                    }
-        
-        # Default: total records
-        return {
-            "success": True,
-            "message": f"📊 **Total Records: {len(df):,}**",
-            "data": {"total_records": len(df)},
-            "suggestions": dataset_info.suggested_questions[:5]
-        }
-    
-    def _handle_average_query(self, query: str, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Handle average-related queries"""
-        
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        
-        # Find relevant numeric column
-        for col in numeric_cols:
-            if col.lower() in query:
-                avg_value = df[col].mean()
-                return {
-                    "success": True,
-                    "message": f"📊 **Average {col}: {avg_value:.2f}**",
-                    "data": {
-                        "column": col,
-                        "average": avg_value,
-                        "min": df[col].min(),
-                        "max": df[col].max(),
-                        "std": df[col].std()
-                    },
-                    "suggestions": dataset_info.suggested_questions[:5]
-                }
-        
-        # Default: show averages for all numeric columns
-        if len(numeric_cols) > 0:
-            averages = {col: df[col].mean() for col in numeric_cols}
-            return {
-                "success": True,
-                "message": "📊 **Average Values**",
-                "data": {"averages": averages},
-                "suggestions": dataset_info.suggested_questions[:5]
-            }
-        
-        return {
-            "success": False,
-            "message": "No numeric columns found for average calculation.",
-            "suggestions": dataset_info.suggested_questions[:5]
-        }
-    
-    def _handle_top_query(self, query: str, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Handle top/maximum queries"""
-        
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        
-        # Find relevant column
-        for col in df.columns:
-            if col.lower() in query:
-                if col in numeric_cols:
-                    top_value = df[col].max()
-                    top_record = df[df[col] == top_value].iloc[0]
-                    return {
-                        "success": True,
-                        "message": f"📊 **Top {col}: {top_value}**",
-                        "data": {
-                            "column": col,
-                            "max_value": top_value,
-                            "record": top_record.to_dict()
-                        },
-                        "suggestions": dataset_info.suggested_questions[:5]
-                    }
-                else:
-                    top_values = df[col].value_counts().head()
-                    return {
-                        "success": True,
-                        "message": f"📊 **Top {col} Values**",
-                        "data": {
-                            "column": col,
-                            "top_values": top_values.to_dict()
-                        },
-                        "suggestions": dataset_info.suggested_questions[:5]
-                    }
-        
-        return {
-            "success": False,
-            "message": "Please specify which column you want to see the top values for.",
-            "suggestions": dataset_info.suggested_questions[:5]
-        }
-    
-    def _handle_trend_query(self, query: str, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Handle trend analysis queries"""
-        
-        date_columns = [col for col in df.columns if 'date' in col.lower()]
-        
-        if not date_columns:
-            return {
-                "success": False,
-                "message": "No date columns found for trend analysis.",
-                "suggestions": dataset_info.suggested_questions[:5]
-            }
-        
-        try:
-            date_col = date_columns[0]
-            df[date_col] = pd.to_datetime(df[date_col])
-            
-            # Find numeric column for trend
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            if len(numeric_cols) == 0:
-                return {
-                    "success": False,
-                    "message": "No numeric columns found for trend analysis.",
-                    "suggestions": dataset_info.suggested_questions[:5]
-                }
-            
-            trend_col = numeric_cols[0]  # Use first numeric column
-            
-            # Group by date and calculate trend
-            daily_trend = df.groupby(df[date_col].dt.date)[trend_col].sum()
-            
-            return {
-                "success": True,
-                "message": f"📈 **Trend Analysis: {trend_col} over {date_col}**",
-                "data": {
-                    "trend_column": trend_col,
-                    "date_column": date_col,
-                    "trend_data": daily_trend.tail(10).to_dict(),
-                    "total_change": daily_trend.iloc[-1] - daily_trend.iloc[0] if len(daily_trend) > 1 else 0
-                },
-                "suggestions": dataset_info.suggested_questions[:5]
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error in trend analysis: {str(e)}",
-                "suggestions": dataset_info.suggested_questions[:5]
-            }
-    
-    def _handle_distribution_query(self, query: str, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Handle distribution/breakdown queries"""
-        
-        # Find relevant categorical column
-        categorical_cols = df.select_dtypes(include=['object']).columns
-        
-        for col in categorical_cols:
-            if col.lower() in query:
-                distribution = df[col].value_counts()
-                return {
-                    "success": True,
-                    "message": f"📊 **Distribution of {col}**",
-                    "data": {
-                        "column": col,
-                        "distribution": distribution.to_dict(),
-                        "unique_count": len(distribution)
-                    },
-                    "suggestions": dataset_info.suggested_questions[:5]
-                }
-        
-        # Default: show distribution of first categorical column
-        if len(categorical_cols) > 0:
-            col = categorical_cols[0]
-            distribution = df[col].value_counts()
-            return {
-                "success": True,
-                "message": f"📊 **Distribution of {col}**",
-                "data": {
-                    "column": col,
-                    "distribution": distribution.to_dict()
-                },
-                "suggestions": dataset_info.suggested_questions[:5]
-            }
-        
-        return {
-            "success": False,
-            "message": "No categorical columns found for distribution analysis.",
-            "suggestions": dataset_info.suggested_questions[:5]
-        }
-    
-    def _generate_basic_info(self, df: pd.DataFrame, dataset_info: DatasetInfo) -> Dict[str, Any]:
-        """Generate basic dataset information"""
-        
-        return {
-            "success": True,
-            "message": f"📊 **Dataset: {dataset_info.filename}**",
-            "data": {
-                "records": len(df),
-                "columns": df.columns.tolist(),
-                "sample": df.head(3).to_dict('records')
-            },
-            "suggestions": dataset_info.suggested_questions[:8]
-        }
-    
-    def _get_all_suggestions(self, datasets: List[DatasetInfo]) -> List[str]:
-        """Get all suggestions from user's datasets"""
-        
+        user_datasets = self.get_user_datasets(user_id)
         all_suggestions = []
-        for dataset in datasets:
-            all_suggestions.extend(dataset.suggested_questions)
         
-        # Remove duplicates and return top 10
-        unique_suggestions = list(dict.fromkeys(all_suggestions))
-        return unique_suggestions[:10]
+        for dataset_info in user_datasets:
+            all_suggestions.extend(dataset_info.suggested_questions)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_suggestions = []
+        for suggestion in all_suggestions:
+            if suggestion not in seen:
+                seen.add(suggestion)
+                unique_suggestions.append(suggestion)
+        
+        return unique_suggestions[:20]  # Return top 20 unique suggestions
     
-    def delete_dataset(self, dataset_id: str, user_id: str) -> bool:
-        """Delete a dataset (only by owner)"""
+    def get_dataset_summary(self, user_id: str) -> Dict[str, Any]:
+        """Get summary of all user datasets"""
         
-        dataset = self.get_dataset(dataset_id)
-        if not dataset or dataset.user_id != user_id:
-            return False
+        user_datasets = self.get_user_datasets(user_id)
         
-        try:
-            # Delete file
-            dataset_file_path = self.storage_dir / f"{dataset_id}.csv"
-            if dataset_file_path.exists():
-                dataset_file_path.unlink()
-            
-            # Delete from database
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM datasets WHERE dataset_id = ?', (dataset_id,))
-            conn.commit()
-            conn.close()
-            
-            # Remove from cache
-            if dataset_id in self.datasets_cache:
-                del self.datasets_cache[dataset_id]
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to delete dataset {dataset_id}: {e}")
-            return False
+        if not user_datasets:
+            return {
+                "total_datasets": 0,
+                "total_rows": 0,
+                "available_columns": [],
+                "insights": []
+            }
+        
+        total_rows = sum(info.row_count for info in user_datasets)
+        all_columns = []
+        all_insights = []
+        
+        for info in user_datasets:
+            all_columns.extend(info.columns)
+            all_insights.extend(info.insights)
+        
+        # Get unique columns
+        unique_columns = list(set(all_columns))
+        
+        return {
+            "total_datasets": len(user_datasets),
+            "total_rows": total_rows,
+            "available_columns": unique_columns,
+            "insights": all_insights,
+            "datasets": [
+                {
+                    "filename": info.filename,
+                    "rows": info.row_count,
+                    "columns": len(info.columns),
+                    "upload_date": info.upload_date.strftime("%Y-%m-%d %H:%M")
+                }
+                for info in user_datasets
+            ]
+        }
