@@ -136,10 +136,14 @@ sample_data/
 user_data/
 *.csv
 *.xlsx
-*.json
+# *.json - removed to allow package.json files
 logs/
 temp/
 .superx_cache/
+
+# Ignore specific JSON files but allow package.json
+secrets.json
+config.json
 
 # Node.js (for frontend)
 node_modules/
@@ -158,6 +162,9 @@ frontend/dist/
 *.swp
 *.swo
 *~
+
+# Kiro IDE files
+.kiro/
 
 # OS
 .DS_Store
@@ -256,8 +263,6 @@ models/
 .env.development.local
 .env.test.local
 .env.production.local
-secrets.json
-config.json
 api_keys.txt
 
 # Database files

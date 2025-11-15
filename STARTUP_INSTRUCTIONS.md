@@ -1,5 +1,25 @@
 # 🚀 X-FORECAST System Startup Instructions
 
+## ⚡ Easiest Way to Run (Windows)
+
+**Just run this PowerShell command:**
+```powershell
+.\start-dev.ps1
+```
+
+This single command will:
+- ✅ Check all dependencies automatically
+- ✅ Set up required directories
+- ✅ Install Python and Node.js packages
+- ✅ Start the API server on port 8000
+- ✅ Start the React dashboard on port 3001
+- ✅ Open your browser automatically
+- ✅ Keep everything running until you press Ctrl+C
+
+**That's it! Skip to the "Using the System" section below.**
+
+---
+
 ## Quick Start Guide
 
 Follow these steps to get the complete X-FORECAST Cyberpunk AI Dashboard system running.
@@ -60,9 +80,27 @@ git --version
 
 ---
 
-## 🎯 Option 1: Automated Startup (Recommended)
+## 🎯 Option 1: PowerShell Automated Startup (Windows - Recommended)
 
-### Step 1: Run the Automated Startup Script
+### Single Command Startup
+```powershell
+.\start-dev.ps1
+```
+
+This PowerShell script will:
+- ✅ Check all dependencies automatically
+- ✅ Set up required directories
+- ✅ Install Python and Node.js packages
+- ✅ Start the API server on port 8000
+- ✅ Start the React dashboard on port 3001
+- ✅ Open your browser automatically
+- ✅ Keep services running until Ctrl+C
+
+---
+
+## 🐍 Option 2: Python Automated Startup (Cross-Platform)
+
+### Step 1: Run the Python Startup Script
 ```bash
 python start_company_sales_system.py
 ```
@@ -80,7 +118,7 @@ This script will:
 
 ---
 
-## 🛠️ Option 2: Manual Startup
+## 🛠️ Option 3: Manual Startup
 
 ### Step 1: Install Dependencies
 
