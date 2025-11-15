@@ -189,19 +189,53 @@ frontend/.nyc_output/
 jest.config.js
 vitest.config.js
 
-# Summary and documentation files
+# Documentation files (keep only README.md and STARTUP_INSTRUCTIONS.md)
 *_SUMMARY.md
 TASK_*_SUMMARY.md
 CYBERPUNK_AI_DASHBOARD_SUMMARY.md
 ADAPTIVE_ENSEMBLE_INTEGRATION_SUMMARY.md
 COMPANY_SALES_SYSTEM_README.md
 START_SYSTEM.md
+AUTHENTICATION_FIX_SUMMARY.md
+DEPLOYMENT_GUIDE.md
+DOCUMENTATION.md
+FILE_STRUCTURE.md
+FINAL_PROJECT_STATUS.md
+NETLIFY_DEPLOYMENT.md
+PROJECT_OVERVIEW.md
+README_SIMPLE.md
+VECTOR_RAG_SETUP.md
+WINDOWS_SETUP.md
 
 # Development and demo files
 start_*.py
 demo_*.py
 simple_*.py
 *_working.py
+bypass_login.py
+chatbot_demo.py
+create_multiple_test_users.py
+create_test_user.py
+create_test_users.py
+fix_auth.py
+generate_dummy_data.py
+quick_setup.py
+setup_dev_environment.py
+simple_auth_test.py
+simple_server.py
+superx_*.py
+web_server.py
+
+# Non-functional/demo interface components
+frontend/src/components/chat/
+frontend/src/components/effects/
+frontend/src/components/insights/ActionTimeline.tsx
+frontend/src/components/insights/ExecutiveSummary.tsx
+frontend/src/components/insights/RecommendationCard.tsx
+frontend/src/components/SeasonalDecompositionChart.tsx
+frontend/src/components/VolatilityRiskAlert.tsx
+frontend/src/components/PatternVisualization.tsx
+frontend/src/components/3d/HolographicRenderer.tsx
 
 # Cache and temporary directories
 .cache/
@@ -231,6 +265,20 @@ api_keys.txt
 *.db
 *.sqlite
 *.sqlite3
+users.db
+rag_vector_db.db
+
+# Configuration and deployment files
+netlify.toml
+vercel.json
+railway.json
+pyproject.toml
+pytest.ini
+setup.py
+
+# Sample data files
+sample_data_*.csv
+demo_output_*/
 
 # Logs and monitoring
 *.log
