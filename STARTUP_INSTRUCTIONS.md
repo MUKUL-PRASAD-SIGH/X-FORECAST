@@ -188,17 +188,71 @@ curl -H "Authorization: Bearer your-company-id" http://localhost:8000/api/compan
 pip install python-multipart
 ```
 
-**2. Frontend TypeScript Errors**
+**2. npm install Issues (Most Common)**
+
+**Clear npm cache and retry:**
+```bash
+cd frontend
+npm cache clean --force
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
+```
+
+**For Windows (if rm command fails):**
+```bash
+cd frontend
+npm cache clean --force
+rmdir /s node_modules
+del package-lock.json
+npm install --legacy-peer-deps
+```
+
+**Node version compatibility:**
+```bash
+# Check Node.js version (should be 18+)
+node --version
+
+# If using older Node.js, update it first
+# Then try installing with specific flags
+npm install --legacy-peer-deps --no-audit --no-fund
+```
+
+**Permission issues (macOS/Linux):**
+```bash
+sudo npm install --legacy-peer-deps
+# OR better: fix npm permissions
+sudo chown -R $(whoami) ~/.npm
+```
+
+**Network/proxy issues:**
+```bash
+npm config set registry https://registry.npmjs.org/
+npm install --legacy-peer-deps
+```
+
+**Alternative installation methods:**
+```bash
+# Try yarn instead of npm
+npm install -g yarn
+cd frontend
+yarn install
+
+# Or use npm with different flags
+npm install --force
+npm install --no-optional
+```
+
+**3. Frontend TypeScript Errors**
 ```bash
 cd frontend
 npm install --legacy-peer-deps
 ```
 
-**3. Port Already in Use**
+**4. Port Already in Use**
 - Backend: Change port in startup command: `--port 8001`
 - Frontend: Set `PORT=3002` environment variable
 
-**4. Python Version Issues**
+**5. Python Version Issues**
 Ensure you're using Python 3.10+:
 ```bash
 python --version
