@@ -143,7 +143,7 @@ npm test                    # Run frontend tests
 
 # Data & AI Components
 python generate_dummy_data.py          # Generate sample datasets
-python create_test_user.py            # Create test users
+python create_test_users.py           # Create test users
 python test_rag_personalization.py    # Test AI personalization
 ```
 

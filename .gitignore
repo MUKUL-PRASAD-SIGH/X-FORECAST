@@ -141,9 +141,22 @@ logs/
 temp/
 .superx_cache/
 
-# Ignore specific JSON files but allow package.json
+# Ignore specific JSON files but allow package.json and essential config files
 secrets.json
 config.json
+
+# Company and user data (JSON files)
+company_data/**/*.json
+data/simple_kb/*.json
+data/users/**/*.json
+
+# Config files (except essential ones)
+config/*.json
+!config/essential_config.json
+
+# Temporary JSON files
+tmp*.json
+*_temp.json
 
 # Node.js (for frontend)
 node_modules/
