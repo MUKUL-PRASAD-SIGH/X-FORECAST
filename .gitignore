@@ -227,7 +227,6 @@ superx_*.py
 web_server.py
 
 # Non-functional/demo interface components
-frontend/src/components/chat/
 frontend/src/components/effects/
 frontend/src/components/insights/ActionTimeline.tsx
 frontend/src/components/insights/ExecutiveSummary.tsx
@@ -276,8 +275,7 @@ pyproject.toml
 pytest.ini
 setup.py
 
-# Sample data files
-sample_data_*.csv
+# Demo output directories
 demo_output_*/
 
 # Logs and monitoring
