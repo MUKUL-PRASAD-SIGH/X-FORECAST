@@ -43,5 +43,3 @@ const PriorityMatrix: React.FC<PriorityMatrixProps> = ({
 };
 
 export default PriorityMatrix;
-
-export default PriorityMatrix;
