@@ -1,0 +1,151 @@
+{
+  "train_test_version_company_20251117_185700": {
+    "job_id": "train_test_version_company_20251117_185700",
+    "company_id": "test_version_company",
+    "model_names": [
+      "arima",
+      "ets",
+      "croston"
+    ],
+    "trigger_reason": "first_version",
+    "data_hash": "3495b9403a9cf4d3874c598cb5fc5451",
+    "status": "completed",
+    "created_at": "2025-11-17T18:57:00.450000",
+    "started_at": "2025-11-17T18:57:00.453192",
+    "completed_at": "2025-11-17T18:57:00.634261",
+    "error_message": null,
+    "previous_versions": {},
+    "new_versions": {
+      "arima": "arima_v20251117_185700",
+      "croston": "croston_v20251117_185700"
+    },
+    "performance_comparison": {
+      "arima": {
+        "has_previous_version": false,
+        "performance_improvement": {},
+        "parameter_changes": {},
+        "recommendation": "activate"
+      },
+      "croston": {
+        "has_previous_version": false,
+        "performance_improvement": {},
+        "parameter_changes": {},
+        "recommendation": "activate"
+      }
+    }
+  },
+  "train_test_version_company_20251117_185715": {
+    "job_id": "train_test_version_company_20251117_185715",
+    "company_id": "test_version_company",
+    "model_names": [
+      "arima",
+      "ets",
+      "croston"
+    ],
+    "trigger_reason": "second_version",
+    "data_hash": "918799d06933275c859aa686503b693c",
+    "status": "completed",
+    "created_at": "2025-11-17T18:57:15.457071",
+    "started_at": "2025-11-17T18:57:15.459078",
+    "completed_at": "2025-11-17T18:57:15.556316",
+    "error_message": null,
+    "previous_versions": {
+      "arima": "arima_v20251117_185700",
+      "croston": "croston_v20251117_185700"
+    },
+    "new_versions": {
+      "arima": "arima_v20251117_185715",
+      "croston": "croston_v20251117_185715"
+    },
+    "performance_comparison": {
+      "arima": {
+        "has_previous_version": true,
+        "performance_improvement": {
+          "mae": {
+            "old_value": 9.882920841433133,
+            "new_value": 530.9325662431053,
+            "improvement": -521.0496454016721,
+            "improvement_percentage": -5272.2231996154915
+          },
+          "mape": {
+            "old_value": 0.3142512827611435,
+            "new_value": 14.262949621433496,
+            "improvement": -13.948698338672353,
+            "improvement_percentage": -4438.7084807143
+          },
+          "rmse": {
+            "old_value": 12.070458666985887,
+            "new_value": 536.0940100899155,
+            "improvement": -524.0235514229296,
+            "improvement_percentage": -4341.372319646768
+          },
+          "r_squared": {
+            "old_value": 0.006052393189886818,
+            "new_value": -0.40312170000579317,
+            "improvement": -0.40917409319568,
+            "improvement_percentage": -6760.5338972257305
+          }
+        },
+        "parameter_changes": {
+          "old_parameters": {
+            "model_type": "arima",
+            "order": [
+              1,
+              1,
+              1
+            ]
+          },
+          "new_parameters": {
+            "model_type": "arima",
+            "order": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "recommendation": "rollback"
+      },
+      "croston": {
+        "has_previous_version": true,
+        "performance_improvement": {
+          "mae": {
+            "old_value": 109.44484207303049,
+            "new_value": 462.25948129183917,
+            "improvement": -352.8146392188087,
+            "improvement_percentage": -322.36753467411654
+          },
+          "mape": {
+            "old_value": 3.477757208458997,
+            "new_value": 12.272764537366431,
+            "improvement": -8.795007328907435,
+            "improvement_percentage": -252.89308027355148
+          },
+          "rmse": {
+            "old_value": 110.11247253462555,
+            "new_value": 465.3739964951298,
+            "improvement": -355.26152396050423,
+            "improvement_percentage": -322.6351345882184
+          },
+          "r_squared": {
+            "old_value": -81.71589538304055,
+            "new_value": -0.05734729166438712,
+            "improvement": 81.65854809137616,
+            "improvement_percentage": -99.92982113039872
+          }
+        },
+        "parameter_changes": {
+          "old_parameters": {
+            "model_type": "croston",
+            "alpha": 0.1
+          },
+          "new_parameters": {
+            "model_type": "croston",
+            "alpha": 0.1
+          }
+        },
+        "recommendation": "rollback"
+      }
+    }
+  }
+}

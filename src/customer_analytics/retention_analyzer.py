@@ -13,7 +13,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import classification_report, roc_auc_score
 import logging
-from lifelines import KaplanMeierFitter, CoxPHFitter
+try:
+    from lifelines import KaplanMeierFitter, CoxPHFitter
+    LIFELINES_AVAILABLE = True
+except ImportError:
+    LIFELINES_AVAILABLE = False
+    KaplanMeierFitter = None
+    CoxPHFitter = None
+
 import warnings
 warnings.filterwarnings('ignore')
 

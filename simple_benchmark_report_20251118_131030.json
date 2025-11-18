@@ -1,0 +1,137 @@
+{
+  "summary": {
+    "total_benchmarks": 5,
+    "passed_benchmarks": 4,
+    "success_rate": 80.0,
+    "timestamp": "2025-11-18T13:10:30.579788"
+  },
+  "benchmark_results": [
+    {
+      "test_name": "Cache Performance",
+      "success": false,
+      "metrics": {
+        "avg_write_time_ms": 0.0473170280456543,
+        "avg_read_time_ms": 0.0,
+        "hit_rate": 0.5,
+        "total_operations": 2000
+      },
+      "details": "",
+      "error": "",
+      "timestamp": "2025-11-18T13:10:24.834133"
+    },
+    {
+      "test_name": "Data Processing Performance",
+      "success": "True",
+      "metrics": {
+        "avg_time_per_1k_rows_ms": 5.900009473164876,
+        "processing_results": [
+          {
+            "data_size": 1000,
+            "processing_time_ms": 17.00115203857422,
+            "time_per_1k_rows_ms": 17.00115203857422
+          },
+          {
+            "data_size": 5000,
+            "processing_time_ms": 1.995086669921875,
+            "time_per_1k_rows_ms": 0.399017333984375
+          },
+          {
+            "data_size": 10000,
+            "processing_time_ms": 2.9985904693603516,
+            "time_per_1k_rows_ms": 0.29985904693603516
+          }
+        ]
+      },
+      "details": "",
+      "error": "",
+      "timestamp": "2025-11-18T13:10:25.413126"
+    },
+    {
+      "test_name": "Memory Management Performance",
+      "success": true,
+      "metrics": {
+        "avg_allocation_time_ms": 9.721801280975342,
+        "avg_deallocation_time_ms": 9.691545963287354,
+        "successful_allocations": 200,
+        "total_allocation_attempts": 200
+      },
+      "details": "",
+      "error": "",
+      "timestamp": "2025-11-18T13:10:28.883521"
+    },
+    {
+      "test_name": "Concurrent Operations Performance",
+      "success": true,
+      "metrics": {
+        "avg_success_rate": 1.0,
+        "max_throughput_ops_sec": 588.2696812016999,
+        "concurrency_results": [
+          {
+            "concurrency_level": 1,
+            "success_rate": 1.0,
+            "total_time_ms": 24.842500686645508,
+            "throughput_ops_sec": 40.25359655268386
+          },
+          {
+            "concurrency_level": 2,
+            "success_rate": 1.0,
+            "total_time_ms": 15.977621078491211,
+            "throughput_ops_sec": 125.17508020592405
+          },
+          {
+            "concurrency_level": 5,
+            "success_rate": 1.0,
+            "total_time_ms": 15.008211135864258,
+            "throughput_ops_sec": 333.15096347837135
+          },
+          {
+            "concurrency_level": 10,
+            "success_rate": 1.0,
+            "total_time_ms": 16.999006271362305,
+            "throughput_ops_sec": 588.2696812016999
+          }
+        ]
+      },
+      "details": "",
+      "error": "",
+      "timestamp": "2025-11-18T13:10:29.485440"
+    },
+    {
+      "test_name": "Load Test Simulation",
+      "success": true,
+      "metrics": {
+        "avg_throughput_ops_sec": 1700.0378734599562,
+        "max_memory_increase_mb": 0.09300000000000352,
+        "load_results": [
+          {
+            "scenario": "light",
+            "total_time_ms": 2.005338668823242,
+            "avg_operation_time_ms": 0.40106773376464844,
+            "memory_increase_mb": 0.09300000000000352,
+            "throughput_ops_sec": 2493.344429913209,
+            "operations_completed": 5
+          },
+          {
+            "scenario": "medium",
+            "total_time_ms": 9.036779403686523,
+            "avg_operation_time_ms": 0.9036779403686523,
+            "memory_increase_mb": 0.0589999999999975,
+            "throughput_ops_sec": 1106.5889243595493,
+            "operations_completed": 10
+          },
+          {
+            "scenario": "heavy",
+            "total_time_ms": 9.998798370361328,
+            "avg_operation_time_ms": 0.6665865580240885,
+            "memory_increase_mb": 0.030000000000001137,
+            "throughput_ops_sec": 1500.1802661071106,
+            "operations_completed": 15
+          }
+        ]
+      },
+      "details": "",
+      "error": "",
+      "timestamp": "2025-11-18T13:10:30.061311"
+    }
+  ]
+}

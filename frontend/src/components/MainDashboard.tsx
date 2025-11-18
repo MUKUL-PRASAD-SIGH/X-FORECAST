@@ -8,7 +8,7 @@ import {
   CyberpunkLoader,
   NavigationItem 
 } from './ui';
-import { CyberpunkChatInterface } from './chat/CyberpunkChatInterface';
+import { EnsembleChatInterface } from './chat/EnsembleChatInterface';
 import { HolographicRenderer } from './3d/HolographicRenderer';
 import { LoginForm } from './auth/LoginForm';
 import { DataUpload } from './DataUpload';
@@ -16,6 +16,7 @@ import { CompanyDetails } from './CompanyDetails';
 import { EnsembleStatus } from './EnsembleStatus';
 import { ModelMonitoringDashboard } from './ModelMonitoringDashboard';
 import { ForecastingDashboard } from './ForecastingDashboard';
+import { CustomerAnalyticsDashboard } from './CustomerAnalyticsDashboard';
 import { CyberpunkTheme } from '../theme/cyberpunkTheme';
 
 const DashboardContainer = styled.div<{ theme: CyberpunkTheme }>`
@@ -506,40 +507,8 @@ export const MainDashboard: React.FC = () => {
     <ForecastingDashboard authToken={authToken!} />
   );
 
-  const renderRetentionContent = () => (
-    <ContentGrid>
-      <DemoCard variant="hologram" hover>
-        <CardTitle>📈 Churn Prediction</CardTitle>
-        <CardDescription>
-          ML-powered customer churn prediction with 88% precision.
-          High-risk customers: {Math.floor(metrics.totalCustomers * 0.15)}
-        </CardDescription>
-        <CyberpunkButton variant="danger" onClick={() => handleDemoAction('churn-prediction')}>
-          Identify At-Risk
-        </CyberpunkButton>
-      </DemoCard>
-
-      <DemoCard variant="neon" hover>
-        <CardTitle>💰 Customer LTV</CardTitle>
-        <CardDescription>
-          Lifetime value calculation and segmentation analysis.
-          Current retention rate: {(metrics.retentionRate * 100).toFixed(1)}%
-        </CardDescription>
-        <CyberpunkButton variant="primary" onClick={() => handleDemoAction('ltv-analysis')}>
-          Calculate LTV
-        </CyberpunkButton>
-      </DemoCard>
-
-      <DemoCard variant="glass" hover>
-        <CardTitle>🎯 Cohort Analysis</CardTitle>
-        <CardDescription>
-          Customer cohort tracking and retention pattern analysis.
-        </CardDescription>
-        <CyberpunkButton variant="secondary" onClick={() => handleDemoAction('cohort-analysis')}>
-          View Cohorts
-        </CyberpunkButton>
-      </DemoCard>
-    </ContentGrid>
+  const renderAnalyticsContent = () => (
+    <CustomerAnalyticsDashboard authToken={authToken!} />
   );
 
   const renderInsightsContent = () => (
@@ -695,15 +664,15 @@ export const MainDashboard: React.FC = () => {
           </motion.div>
         )}
         
-        {activeView === 'retention' && (
+        {activeView === 'analytics' && (
           <motion.div
-            key="retention"
+            key="analytics"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            {renderRetentionContent()}
+            {renderAnalyticsContent()}
           </motion.div>
         )}
         
@@ -836,41 +805,10 @@ export const MainDashboard: React.FC = () => {
       {/* AI Chatbot Interface */}
       <AnimatePresence>
         {chatOpen && (
-          <CyberpunkChatInterface
+          <EnsembleChatInterface
             isOpen={chatOpen}
             onClose={() => setChatOpen(false)}
-            onSendMessage={async (message: string) => {
-              // Integrate with backend API
-              try {
-                const response = await fetch('http://localhost:8000/api/company-sales/chat', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`,
-                  },
-                  body: JSON.stringify({ message }),
-                });
-                const data = await response.json();
-                return {
-                  id: `ai-${Date.now()}`,
-                  type: 'ai' as const,
-                  content: data.response_text || data.response || 'Processing your request...',
-                  timestamp: new Date(),
-                  confidence: data.confidence || 0.85,
-                  followUpQuestions: data.follow_up_questions || []
-                };
-              } catch (error) {
-                console.error('Chat API error:', error);
-                return {
-                  id: `ai-error-${Date.now()}`,
-                  type: 'ai' as const,
-                  content: 'I apologize, but I\'m having trouble connecting to the AI service. Please try again later.',
-                  timestamp: new Date(),
-                  confidence: 0.0,
-                  followUpQuestions: []
-                };
-              }
-            }}
+            companyId={user?.company_name || 'superx'}
           />
         )}
       </AnimatePresence>

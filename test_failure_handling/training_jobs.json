@@ -1,0 +1,30 @@
+{
+  "train_test_failure_company_20251117_185650": {
+    "job_id": "train_test_failure_company_20251117_185650",
+    "company_id": "test_failure_company",
+    "model_names": [
+      "arima",
+      "ets",
+      "croston"
+    ],
+    "trigger_reason": "test_failure_handling",
+    "data_hash": "d722d214a15d83df9ff0472645bf5a64",
+    "status": "completed",
+    "created_at": "2025-11-17T18:56:50.430847",
+    "started_at": "2025-11-17T18:56:50.431843",
+    "completed_at": "2025-11-17T18:56:50.447505",
+    "error_message": null,
+    "previous_versions": {},
+    "new_versions": {
+      "croston": "croston_v20251117_185650"
+    },
+    "performance_comparison": {
+      "croston": {
+        "has_previous_version": false,
+        "performance_improvement": {},
+        "parameter_changes": {},
+        "recommendation": "activate"
+      }
+    }
+  }
+}

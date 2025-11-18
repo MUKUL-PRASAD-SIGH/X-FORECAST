@@ -1,0 +1,133 @@
+{
+  "model_versions": {
+    "arima": [
+      {
+        "version_id": "arima_v20251117_185700",
+        "model_name": "arima",
+        "training_timestamp": "2025-11-17T18:57:00.607828",
+        "data_hash": "3495b9403a9cf4d3874c598cb5fc5451",
+        "performance_metrics": {
+          "mae": 9.882920841433133,
+          "mape": 0.3142512827611435,
+          "rmse": 12.070458666985887,
+          "r_squared": 0.006052393189886818
+        },
+        "model_parameters": {
+          "model_type": "arima",
+          "order": [
+            1,
+            1,
+            1
+          ]
+        },
+        "training_data_size": 12,
+        "pattern_characteristics": {
+          "pattern_type": "stationary",
+          "seasonality_strength": 0.0,
+          "trend_strength": 0.15559698521561233,
+          "intermittency_ratio": 0.049999999999999996,
+          "volatility": 0.14706566217992326,
+          "confidence": 0.4901789447592564,
+          "detected_period": null
+        },
+        "seasonal_parameters": {},
+        "file_path": "test_version_comparison\\arima\\arima_v20251117_185700.pkl"
+      },
+      {
+        "version_id": "arima_v20251117_185715",
+        "model_name": "arima",
+        "training_timestamp": "2025-11-17T18:57:15.540073",
+        "data_hash": "918799d06933275c859aa686503b693c",
+        "performance_metrics": {
+          "mae": 530.9325662431053,
+          "mape": 14.262949621433496,
+          "rmse": 536.0940100899155,
+          "r_squared": -0.40312170000579317
+        },
+        "model_parameters": {
+          "model_type": "arima",
+          "order": [
+            1,
+            1,
+            1
+          ]
+        },
+        "training_data_size": 15,
+        "pattern_characteristics": {
+          "pattern_type": "trending",
+          "seasonality_strength": 0.0,
+          "trend_strength": 0.2265217621212594,
+          "intermittency_ratio": 0.04,
+          "volatility": 0.09564238019399637,
+          "confidence": 0.5637623478194043,
+          "detected_period": null
+        },
+        "seasonal_parameters": {},
+        "file_path": "test_version_comparison\\arima\\arima_v20251117_185715.pkl"
+      }
+    ],
+    "croston": [
+      {
+        "version_id": "croston_v20251117_185700",
+        "model_name": "croston",
+        "training_timestamp": "2025-11-17T18:57:00.630824",
+        "data_hash": "3495b9403a9cf4d3874c598cb5fc5451",
+        "performance_metrics": {
+          "mae": 109.44484207303049,
+          "mape": 3.477757208458997,
+          "rmse": 110.11247253462555,
+          "r_squared": -81.71589538304055
+        },
+        "model_parameters": {
+          "model_type": "croston",
+          "alpha": 0.1
+        },
+        "training_data_size": 12,
+        "pattern_characteristics": {
+          "pattern_type": "stationary",
+          "seasonality_strength": 0.0,
+          "trend_strength": 0.15559698521561233,
+          "intermittency_ratio": 0.049999999999999996,
+          "volatility": 0.14706566217992326,
+          "confidence": 0.4901789447592564,
+          "detected_period": null
+        },
+        "seasonal_parameters": {},
+        "file_path": "test_version_comparison\\croston\\croston_v20251117_185700.pkl"
+      },
+      {
+        "version_id": "croston_v20251117_185715",
+        "model_name": "croston",
+        "training_timestamp": "2025-11-17T18:57:15.554318",
+        "data_hash": "918799d06933275c859aa686503b693c",
+        "performance_metrics": {
+          "mae": 462.25948129183917,
+          "mape": 12.272764537366431,
+          "rmse": 465.3739964951298,
+          "r_squared": -0.05734729166438712
+        },
+        "model_parameters": {
+          "model_type": "croston",
+          "alpha": 0.1
+        },
+        "training_data_size": 15,
+        "pattern_characteristics": {
+          "pattern_type": "trending",
+          "seasonality_strength": 0.0,
+          "trend_strength": 0.2265217621212594,
+          "intermittency_ratio": 0.04,
+          "volatility": 0.09564238019399637,
+          "confidence": 0.5637623478194043,
+          "detected_period": null
+        },
+        "seasonal_parameters": {},
+        "file_path": "test_version_comparison\\croston\\croston_v20251117_185715.pkl"
+      }
+    ]
+  },
+  "active_versions": {
+    "arima": "arima_v20251117_185700",
+    "croston": "croston_v20251117_185700"
+  },
+  "last_updated": "2025-11-17T18:57:15.561322"
+}

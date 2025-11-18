@@ -326,7 +326,7 @@ async def upload_enhanced_sales_data(
     file: UploadFile = File(..., description="Sales data file with ensemble initialization"),
     company_id: str = Depends(get_company_id_from_token)
 ):
-    """Enhanced upload with ensemble model initialization and pattern detection"""
+    """Enhanced upload with ensemble model initialization, pattern detection, and automated training"""
     
     try:
         # Validate file format
@@ -357,7 +357,8 @@ async def upload_enhanced_sales_data(
                 'original_filename': file.filename,
                 'file_format': file_format,
                 'file_size': file.size,
-                'enhanced_upload': True
+                'enhanced_upload': True,
+                'data_type': 'monthly'  # Indicate this is monthly data for training pipeline
             }
         )
         
@@ -365,6 +366,8 @@ async def upload_enhanced_sales_data(
         ensemble_initialized = False
         models_initialized = []
         pattern_detected = "unknown"
+        training_job_id = None
+        training_triggered = False
         
         try:
             if company_id not in forecasting_engine.company_models:
@@ -381,6 +384,31 @@ async def upload_enhanced_sales_data(
                         pattern_detected = forecast_result.pattern_detected.pattern_type
                 except Exception as e:
                     logger.warning(f"Pattern detection failed for company {company_id}: {e}")
+            
+            # Trigger automated training pipeline if available
+            try:
+                from .automated_training_api import training_integration
+                if training_integration:
+                    training_result = await training_integration.handle_data_upload(
+                        company_id=company_id,
+                        new_data=data,
+                        upload_metadata={
+                            'original_filename': file.filename,
+                            'file_format': file_format,
+                            'data_type': 'monthly'
+                        }
+                    )
+                    
+                    training_triggered = training_result.get('should_retrain', False)
+                    training_job_id = training_result.get('training_job_id')
+                    
+                    logger.info(f"Automated training pipeline result for {company_id}: "
+                               f"triggered={training_triggered}, job_id={training_job_id}")
+                
+            except ImportError:
+                logger.info("Automated training pipeline not available")
+            except Exception as e:
+                logger.warning(f"Automated training pipeline failed for company {company_id}: {e}")
         
         except Exception as e:
             logger.warning(f"Ensemble initialization failed for company {company_id}: {e}")
@@ -388,9 +416,13 @@ async def upload_enhanced_sales_data(
         # Calculate data quality score
         data_quality = 0.8  # Placeholder - would implement actual quality assessment
         
+        response_message = "Data uploaded and ensemble models initialized successfully"
+        if training_triggered:
+            response_message += f". Automated retraining triggered (Job ID: {training_job_id})"
+        
         return DataUploadResponse(
             success=True,
-            message="Data uploaded and ensemble models initialized successfully",
+            message=response_message,
             file_path=file_path,
             records_processed=len(data),
             validation_errors=None,
@@ -402,7 +434,10 @@ async def upload_enhanced_sales_data(
                 "initialized": ensemble_initialized,
                 "total_models": len(models_initialized) if models_initialized else 0,
                 "pattern_detection_enabled": True,
-                "adaptive_weights_enabled": True
+                "adaptive_weights_enabled": True,
+                "automated_training_enabled": training_integration is not None,
+                "training_triggered": training_triggered,
+                "training_job_id": training_job_id
             }
         )
     

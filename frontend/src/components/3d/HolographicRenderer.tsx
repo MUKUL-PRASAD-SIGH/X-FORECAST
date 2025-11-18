@@ -6,13 +6,13 @@ import { motion } from 'framer-motion';
 import styled from 'styled-components';
 
 // Types for 3D data visualization
-interface TimeSeriesData {
+export interface TimeSeriesData {
   date: string;
   value: number;
   category?: string;
 }
 
-interface CustomerJourney {
+export interface CustomerJourney {
   customerId: string;
   touchpoints: Array<{
     timestamp: string;
@@ -22,7 +22,7 @@ interface CustomerJourney {
   }>;
 }
 
-interface HolographicRendererProps {
+export interface HolographicRendererProps {
   data: TimeSeriesData[] | CustomerJourney;
   type: 'timeSeries' | 'customerJourney' | 'scatter3d' | 'network';
   theme: 'cyberpunk' | 'neon' | 'hologram';

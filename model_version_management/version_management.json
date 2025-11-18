@@ -1,0 +1,10 @@
+{
+  "active_versions": {},
+  "version_status": {
+    "ARIMA": {
+      "test_version_001": "inactive"
+    }
+  },
+  "rollback_history": [],
+  "last_updated": "2025-11-17T19:28:33.638628"
+}

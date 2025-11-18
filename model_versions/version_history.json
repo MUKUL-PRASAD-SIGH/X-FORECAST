@@ -1,0 +1,105 @@
+{
+  "model_versions": {
+    "arima": [
+      {
+        "version_id": "arima_v20251117_192828",
+        "model_name": "arima",
+        "training_timestamp": "2025-11-17T19:28:28.767716",
+        "data_hash": "7178b0fc2b0be2607742e1c1575495df",
+        "performance_metrics": {
+          "mae": 248.91213344221984,
+          "mape": 25.312861448819866,
+          "rmse": 260.1256136807234,
+          "r_squared": -0.1362625042741581
+        },
+        "model_parameters": {
+          "model_type": "arima",
+          "order": [
+            1,
+            1,
+            1
+          ]
+        },
+        "training_data_size": 24,
+        "pattern_characteristics": {
+          "pattern_type": "stationary",
+          "seasonality_strength": 0.22857703098600132,
+          "trend_strength": 0.17532146857320988,
+          "intermittency_ratio": 0.0375,
+          "volatility": 0.1819294554220941,
+          "confidence": 0.6641413940810864,
+          "detected_period": 7
+        },
+        "seasonal_parameters": {},
+        "file_path": "model_versions\\arima\\arima_v20251117_192828.pkl"
+      }
+    ],
+    "ets": [
+      {
+        "version_id": "ets_v20251117_192829",
+        "model_name": "ets",
+        "training_timestamp": "2025-11-17T19:28:29.033996",
+        "data_hash": "7178b0fc2b0be2607742e1c1575495df",
+        "performance_metrics": {
+          "mae": 187.13187931703624,
+          "mape": 21.151490900727975,
+          "rmse": 245.72726278407347,
+          "r_squared": -0.013956038369146384
+        },
+        "model_parameters": {
+          "model_type": "ets",
+          "trend": "add",
+          "seasonal": "add"
+        },
+        "training_data_size": 24,
+        "pattern_characteristics": {
+          "pattern_type": "stationary",
+          "seasonality_strength": 0.22857703098600132,
+          "trend_strength": 0.17532146857320988,
+          "intermittency_ratio": 0.0375,
+          "volatility": 0.1819294554220941,
+          "confidence": 0.6641413940810864,
+          "detected_period": 7
+        },
+        "seasonal_parameters": {},
+        "file_path": "model_versions\\ets\\ets_v20251117_192829.pkl"
+      }
+    ],
+    "croston": [
+      {
+        "version_id": "croston_v20251117_192829",
+        "model_name": "croston",
+        "training_timestamp": "2025-11-17T19:28:29.050998",
+        "data_hash": "7178b0fc2b0be2607742e1c1575495df",
+        "performance_metrics": {
+          "mae": 241.4819398587635,
+          "mape": 24.746824513560124,
+          "rmse": 252.79309517706218,
+          "r_squared": -0.07310657235079177
+        },
+        "model_parameters": {
+          "model_type": "croston",
+          "alpha": 0.1
+        },
+        "training_data_size": 24,
+        "pattern_characteristics": {
+          "pattern_type": "stationary",
+          "seasonality_strength": 0.22857703098600132,
+          "trend_strength": 0.17532146857320988,
+          "intermittency_ratio": 0.0375,
+          "volatility": 0.1819294554220941,
+          "confidence": 0.6641413940810864,
+          "detected_period": 7
+        },
+        "seasonal_parameters": {},
+        "file_path": "model_versions\\croston\\croston_v20251117_192829.pkl"
+      }
+    ]
+  },
+  "active_versions": {
+    "arima": "arima_v20251117_192828",
+    "ets": "ets_v20251117_192829",
+    "croston": "croston_v20251117_192829"
+  },
+  "last_updated": "2025-11-17T19:28:29.115645"
+}

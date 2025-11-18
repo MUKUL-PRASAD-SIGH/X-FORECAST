@@ -31,6 +31,10 @@ try:
     # Import company sales API
     from .company_sales_api import router as company_sales_router
     COMPANY_SALES_AVAILABLE = True
+    
+    # Import customer analytics API
+    from .customer_analytics_api import router as customer_analytics_router
+    CUSTOMER_ANALYTICS_AVAILABLE = True
 except ImportError:
     # Fallback classes for missing modules
     class IntegratedForecastingEngine:
@@ -54,6 +58,10 @@ except ImportError:
     # Company sales API not available
     company_sales_router = None
     COMPANY_SALES_AVAILABLE = False
+    
+    # Customer analytics API not available
+    customer_analytics_router = None
+    CUSTOMER_ANALYTICS_AVAILABLE = False
 
 from ..ai_chatbot.conversational_ai import ConversationalAI, ChatResponse
 try:
@@ -145,6 +153,22 @@ async def lifespan(app: FastAPI):
     # Auto-initialize SuperX
     asyncio.create_task(auto_init_superx())
     
+    # Initialize training progress API if available
+    try:
+        from .training_progress_api import init_training_progress_api
+        from ..models.ensemble_forecasting_engine import EnsembleForecastingEngine
+        from ..models.automated_training_pipeline import AutomatedTrainingPipeline
+        
+        # Create instances for training progress monitoring
+        ensemble_engine = EnsembleForecastingEngine()
+        training_pipeline = AutomatedTrainingPipeline(ensemble_engine)
+        
+        # Initialize training progress API
+        init_training_progress_api(ensemble_engine, training_pipeline)
+        logger.info("Training progress monitoring initialized")
+    except ImportError as e:
+        logger.warning(f"Training progress monitoring not available: {e}")
+    
     logger.info("Cyberpunk AI Dashboard initialized successfully!")
     
     yield
@@ -173,6 +197,79 @@ if ADAPTIVE_CONFIG_AVAILABLE and adaptive_config_router:
 # Include company sales routes if available
 if COMPANY_SALES_AVAILABLE and company_sales_router:
     app.include_router(company_sales_router, tags=["Company Sales Forecasting"])
+
+# Include customer analytics routes if available
+if CUSTOMER_ANALYTICS_AVAILABLE and customer_analytics_router:
+    app.include_router(customer_analytics_router, tags=["Customer Analytics"])
+
+# Include export and reporting routes
+try:
+    from .export_api import router as export_router
+    app.include_router(export_router, tags=["Export & Reporting"])
+    EXPORT_API_AVAILABLE = True
+    logger.info("Export and reporting API included")
+except ImportError:
+    EXPORT_API_AVAILABLE = False
+    logger.warning("Export API not available")
+
+# Include shareable reports routes
+try:
+    from .shareable_reports_api import router as shareable_reports_router
+    app.include_router(shareable_reports_router, tags=["Shareable Reports"])
+    SHAREABLE_REPORTS_AVAILABLE = True
+    logger.info("Shareable reports API included")
+except ImportError:
+    SHAREABLE_REPORTS_AVAILABLE = False
+    logger.warning("Shareable reports API not available")
+
+# Include model performance tracking routes
+try:
+    from .model_performance_api import router as model_performance_router
+    app.include_router(model_performance_router, tags=["Model Performance Tracking"])
+    MODEL_PERFORMANCE_AVAILABLE = True
+except ImportError:
+    MODEL_PERFORMANCE_AVAILABLE = False
+    logger.warning("Model performance tracking API not available")
+
+# Include automated training pipeline routes
+try:
+    from .automated_training_api import router as automated_training_router
+    app.include_router(automated_training_router, tags=["Automated Training Pipeline"])
+    AUTOMATED_TRAINING_AVAILABLE = True
+    logger.info("Automated training pipeline API included")
+except ImportError:
+    AUTOMATED_TRAINING_AVAILABLE = False
+    logger.warning("Automated training pipeline API not available")
+
+# Include training progress monitoring routes
+try:
+    from .training_progress_api import router as training_progress_router
+    app.include_router(training_progress_router, tags=["Training Progress Monitoring"])
+    TRAINING_PROGRESS_AVAILABLE = True
+    logger.info("Training progress monitoring API included")
+except ImportError:
+    TRAINING_PROGRESS_AVAILABLE = False
+    logger.warning("Training progress monitoring API not available")
+
+# Include ensemble chat API
+try:
+    from .ensemble_chat_api import router as ensemble_chat_router
+    app.include_router(ensemble_chat_router, tags=["Ensemble Chat"])
+    ENSEMBLE_CHAT_AVAILABLE = True
+    logger.info("Ensemble chat API included")
+except ImportError:
+    ENSEMBLE_CHAT_AVAILABLE = False
+    logger.warning("Ensemble chat API not available")
+
+# Include enhanced ensemble API
+try:
+    from .ensemble_api import router as ensemble_api_router
+    app.include_router(ensemble_api_router, tags=["Enhanced Ensemble Integration"])
+    ENSEMBLE_API_AVAILABLE = True
+    logger.info("Enhanced ensemble API included")
+except ImportError:
+    ENSEMBLE_API_AVAILABLE = False
+    logger.warning("Enhanced ensemble API not available")
 
 # Add bypass endpoint for direct SuperX access
 @app.post("/api/v1/superx/chat")
@@ -279,6 +376,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add ensemble security middleware
+try:
+    from .ensemble_security import security_middleware
+    app.middleware("http")(security_middleware)
+    logger.info("Ensemble security middleware added")
+except ImportError:
+    logger.warning("Ensemble security middleware not available")
 
 # Pydantic models for API requests/responses
 class ForecastRequest(BaseModel):
