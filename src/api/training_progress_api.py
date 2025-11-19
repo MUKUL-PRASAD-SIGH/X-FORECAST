@@ -12,15 +12,15 @@ import asyncio
 import json
 
 # Import training progress components
-from ..models.training_progress_monitor import (
+from src.models.training_progress_monitor import (
     TrainingProgressMonitor, ProgressUpdate, TrainingNotification, 
     DataQualityValidation, ProgressStage, NotificationType
 )
-from ..models.model_version_manager import (
+from src.models.model_version_manager import (
     ModelVersionManager, RollbackReason, VersionComparison
 )
-from ..models.automated_training_pipeline import AutomatedTrainingPipeline
-from ..models.ensemble_forecasting_engine import EnsembleForecastingEngine
+from src.models.automated_training_pipeline import AutomatedTrainingPipeline
+from src.models.ensemble_forecasting_engine import EnsembleForecastingEngine
 
 logger = logging.getLogger(__name__)
 

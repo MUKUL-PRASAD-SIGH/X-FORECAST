@@ -8,8 +8,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import logging
 
-from ..models.ensemble_forecasting_engine import EnsembleForecastingEngine
-from ..models.weight_adaptation_system import WeightUpdateTrigger
+from src.models.ensemble_forecasting_engine import EnsembleForecastingEngine
+from src.models.weight_adaptation_system import WeightUpdateTrigger
 from .auth import get_current_user
 
 logger = logging.getLogger(__name__)

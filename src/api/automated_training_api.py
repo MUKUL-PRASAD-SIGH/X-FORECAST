@@ -12,9 +12,9 @@ import pandas as pd
 import numpy as np
 
 # Import training pipeline components
-from ..models.training_pipeline_integration import TrainingPipelineIntegration
-from ..models.ensemble_forecasting_engine import EnsembleForecastingEngine
-from ..models.model_performance_tracker import ModelPerformanceTracker
+from src.models.training_pipeline_integration import TrainingPipelineIntegration
+from src.models.ensemble_forecasting_engine import EnsembleForecastingEngine
+from src.models.model_performance_tracker import ModelPerformanceTracker
 
 logger = logging.getLogger(__name__)
 

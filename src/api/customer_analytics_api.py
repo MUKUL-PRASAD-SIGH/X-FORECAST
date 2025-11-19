@@ -10,8 +10,8 @@ import logging
 from datetime import datetime
 import os
 
-from ..customer_analytics.customer_analytics_integration import CustomerAnalyticsIntegration
-from ..customer_analytics.customer_analytics_engine import CustomerAnalytics
+from src.customer_analytics.customer_analytics_integration import CustomerAnalyticsIntegration
+from src.customer_analytics.customer_analytics_engine import CustomerAnalytics
 
 logger = logging.getLogger(__name__)
 
