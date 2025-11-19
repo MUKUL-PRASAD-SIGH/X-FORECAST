@@ -20,10 +20,10 @@ import uvicorn
 
 # Import our custom modules
 try:
-    from ..models.integrated_forecasting import IntegratedForecastingEngine, EnhancedForecast
-    from ..customer_analytics.retention_analyzer import RetentionAnalyzer, RetentionInsights
-    from ..data_fabric.unified_connector import UnifiedDataConnector
-    from ..predictive_maintenance.maintenance_engine import PredictiveMaintenanceEngine
+    from src.models.integrated_forecasting import IntegratedForecastingEngine, EnhancedForecast
+    from src.customer_analytics.retention_analyzer import RetentionAnalyzer, RetentionInsights
+    from src.data_fabric.unified_connector import UnifiedDataConnector
+    from src.predictive_maintenance.maintenance_engine import PredictiveMaintenanceEngine
     # Import adaptive configuration API
     from .adaptive_config_api import router as adaptive_config_router
     ADAPTIVE_CONFIG_AVAILABLE = True
@@ -63,14 +63,14 @@ except ImportError:
     customer_analytics_router = None
     CUSTOMER_ANALYTICS_AVAILABLE = False
 
-from ..ai_chatbot.conversational_ai import ConversationalAI, ChatResponse
+from src.ai_chatbot.conversational_ai import ConversationalAI, ChatResponse
 try:
-    from ..api.auth_endpoints import router as auth_router
+    from src.api.auth_endpoints import router as auth_router
 except ImportError as e:
     print(f"Real auth endpoints not available: {e}")
     # Fallback to dev endpoints if real ones not available
     try:
-        from ..api.auth_endpoints_dev import router as auth_router
+        from src.api.auth_endpoints_dev import router as auth_router
         print("Using development auth endpoints")
     except ImportError:
         print("No auth endpoints available")
@@ -107,7 +107,7 @@ async def verify_token_middleware(request: Request, call_next):
     else:
         # Verify token if provided
         try:
-            from ..auth.user_management import user_manager
+            from src.auth.user_management import user_manager
             token = auth_header.split(" ")[1]
             user_data = user_manager.verify_token(token)
             if not user_data:
@@ -200,8 +200,8 @@ async def lifespan(app: FastAPI):
     # Initialize training progress API if available
     try:
         from .training_progress_api import init_training_progress_api
-        from ..models.ensemble_forecasting_engine import EnsembleForecastingEngine
-        from ..models.automated_training_pipeline import AutomatedTrainingPipeline
+        from src.models.ensemble_forecasting_engine import EnsembleForecastingEngine
+        from src.models.automated_training_pipeline import AutomatedTrainingPipeline
         
         # Create instances for training progress monitoring
         ensemble_engine = EnsembleForecastingEngine()
@@ -370,7 +370,7 @@ async def enhanced_ensemble_upload(file: UploadFile = File(...), current_user: d
             
             # Integrate with RAG system
             try:
-                from ..rag.real_vector_rag import real_vector_rag
+                from src.rag.real_vector_rag import real_vector_rag
                 company_name = current_user.get("company_name", "Unknown Company")
                 real_vector_rag.load_company_data(current_user['user_id'], company_name, file_path)
             except Exception as rag_error:
@@ -398,7 +398,7 @@ async def enhanced_ensemble_upload(file: UploadFile = File(...), current_user: d
             
             # Process PDF
             try:
-                from ..rag.real_vector_rag import real_vector_rag
+                from src.rag.real_vector_rag import real_vector_rag
                 company_name = current_user.get("company_name", "Unknown Company")
                 
                 success = real_vector_rag.add_pdf_document(current_user['user_id'], company_name, file_path)

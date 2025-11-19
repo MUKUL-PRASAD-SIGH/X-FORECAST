@@ -241,7 +241,7 @@ class PersonalizedRAG:
     
     def _get_fallback_response(self, query: str) -> Dict[str, Any]:
         """Fallback to SuperX data when user data unavailable"""
-        from ..data.superx_dataset import superx_data
+        from src.data.superx_dataset import superx_data
         
         recommendations = superx_data.get_product_recommendations(limit=5)
         product_list = "\n".join([f"{p['id']}. {p['name']}" for p in recommendations])

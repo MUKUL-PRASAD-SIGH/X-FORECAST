@@ -10,7 +10,7 @@ from datetime import datetime
 import pandas as pd
 import os
 try:
-    from ..rag.real_vector_rag import real_vector_rag
+    from src.rag.real_vector_rag import real_vector_rag
 except ImportError:
     # Fallback if vector RAG not available
     class MockVectorRAG:

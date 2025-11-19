@@ -12,15 +12,38 @@ import os
 from datetime import datetime
 import sqlite3
 import pickle
-from sentence_transformers import SentenceTransformer
-import faiss
 from dataclasses import dataclass
 import logging
 
-# Import PDF processor
-from .pdf_processor import PDFProcessor, PDFExtractionResult, PDFMetadata
-
 logger = logging.getLogger(__name__)
+
+# Import dependencies with graceful degradation
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    logger.warning("sentence_transformers not available - RAG system will use fallback mode")
+    SentenceTransformer = None
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    logger.warning("faiss not available - will use slower similarity search")
+    faiss = None
+    FAISS_AVAILABLE = False
+
+# Import PDF processor
+try:
+    from .pdf_processor import PDFProcessor, PDFExtractionResult, PDFMetadata
+    PDF_PROCESSOR_AVAILABLE = True
+except ImportError:
+    logger.warning("PDF processor not available")
+    PDFProcessor = None
+    PDFExtractionResult = None
+    PDFMetadata = None
+    PDF_PROCESSOR_AVAILABLE = False
 
 @dataclass
 class DocumentSource:
@@ -40,13 +63,59 @@ class RAGResponse:
 
 class RealVectorRAG:
     def __init__(self):
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        # Initialize with dependency checking
+        self.dependencies_available = self._check_dependencies()
+        
+        if SENTENCE_TRANSFORMERS_AVAILABLE:
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        else:
+            self.model = self._create_fallback_model()
+        
         self.user_indices = {}  # FAISS indices per user
         self.user_documents = {}  # Document store per user
         self.user_metadata = {}  # Company metadata per user
         self.db_path = "rag_vector_db.db"
-        self.pdf_processor = PDFProcessor()
+        
+        if PDF_PROCESSOR_AVAILABLE:
+            self.pdf_processor = PDFProcessor()
+        else:
+            self.pdf_processor = None
+            
         self._init_database()
+        
+        if not self.dependencies_available:
+            logger.warning("RealVectorRAG initialized with limited functionality due to missing dependencies")
+    
+    def _check_dependencies(self) -> bool:
+        """Check if all critical dependencies are available"""
+        return SENTENCE_TRANSFORMERS_AVAILABLE and FAISS_AVAILABLE
+    
+    def _create_fallback_model(self):
+        """Create fallback model when sentence_transformers is not available"""
+        try:
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            logger.info("Using TF-IDF fallback model")
+            
+            class TfidfFallbackModel:
+                def __init__(self):
+                    self.vectorizer = TfidfVectorizer(max_features=500, stop_words='english')
+                    self.fitted = False
+                
+                def encode(self, texts):
+                    if isinstance(texts, str):
+                        texts = [texts]
+                    
+                    if not self.fitted:
+                        self.vectorizer.fit(texts)
+                        self.fitted = True
+                    
+                    return self.vectorizer.transform(texts).toarray()
+            
+            return TfidfFallbackModel()
+            
+        except ImportError:
+            logger.error("sklearn also not available - RAG functionality severely limited")
+            return None
     
     def _init_database(self):
         """Initialize vector database for multi-tenant RAG"""

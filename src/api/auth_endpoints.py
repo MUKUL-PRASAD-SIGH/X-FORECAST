@@ -15,8 +15,8 @@ from email.mime.multipart import MimeMultipart
 from datetime import datetime, timedelta
 
 # Import authentication components
-from ..auth.user_management import user_manager
-from ..auth.multi_tenant_auth import Company, User
+from src.auth.user_management import user_manager
+from src.auth.multi_tenant_auth import Company, User
 
 router = APIRouter()
 

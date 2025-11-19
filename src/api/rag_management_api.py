@@ -8,8 +8,9 @@ from typing import Dict, List, Optional
 import logging
 from datetime import datetime
 
-from ..auth.user_management import user_manager
-from ..rag.rag_manager import rag_manager, RAGHealthStatus, RAGMigrationResult
+from src.auth.user_management import user_manager
+from src.rag.enhanced_rag_manager import enhanced_rag_manager as rag_manager
+from src.rag.rag_manager import RAGHealthStatus, RAGMigrationResult
 
 logger = logging.getLogger(__name__)
 

@@ -14,8 +14,8 @@ import logging
 import asyncio
 
 # Import RAG system and PDF processor
-from ..rag.real_vector_rag import real_vector_rag
-from ..rag.pdf_processor import pdf_processor, PDFProcessingError
+from src.rag.real_vector_rag import real_vector_rag
+from src.rag.pdf_processor import pdf_processor, PDFProcessingError
 
 logger = logging.getLogger(__name__)
 

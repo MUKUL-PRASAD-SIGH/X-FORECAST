@@ -383,3 +383,63 @@ metrics/
 *.temp
 *.bak
 *.backup
+
+# Additional sensitive files (SECURITY)
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/.env.development
+
+# Database files (specific sensitive ones)
+users.db
+rag_vector_db.db
+rag_health_monitoring.db
+data/master.db
+
+# Temporary config files with potential secrets
+config/tmp*.json
+config/*_temp.json
+config/*_secret*.json
+config/*_key*.json
+
+# Company and user sensitive data
+company_data/
+data/users/
+data/uploads/
+data/knowledge_base/
+
+# Authentication and session files
+auth_tokens/
+sessions/
+*.session
+*.token
+
+# Email and SMTP credentials
+email_config.json
+smtp_config.json
+
+# API keys and secrets (additional patterns)
+*api_key*
+*secret_key*
+*access_token*
+*refresh_token*
+*.credentials
+
+# SSL certificates and keys
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+ssl/
+certs/
+
+# OAuth and JWT secrets
+oauth_config.json
+jwt_secrets.json
+
+# Production deployment secrets
+.env.production
+.env.staging
+production.env
+staging.env

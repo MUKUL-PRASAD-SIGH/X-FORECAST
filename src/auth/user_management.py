@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Import RAG system for initialization
 try:
-    from ..rag.real_vector_rag import real_vector_rag
+    from src.rag.real_vector_rag import real_vector_rag
 except ImportError:
     logger.warning("RAG system not available - RAG initialization will be skipped")
     real_vector_rag = None
