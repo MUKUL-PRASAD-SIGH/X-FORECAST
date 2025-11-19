@@ -385,17 +385,7 @@ async def health_check() -> Dict[str, str]:
         'timestamp': datetime.now().isoformat()
     }
 
-# Error handlers
-@router.exception_handler(404)
-async def not_found_handler(request, exc):
-    return JSONResponse(
-        status_code=404,
-        content={'error': 'Resource not found', 'detail': str(exc.detail)}
-    )
+# Note: Exception handlers should be added to the main app, not router
+# These would be added in main.py if needed
 
-@router.exception_handler(500)
-async def internal_error_handler(request, exc):
-    return JSONResponse(
-        status_code=500,
-        content={'error': 'Internal server error', 'detail': str(exc.detail)}
-    )
+# Exception handlers removed - should be added to main app if needed

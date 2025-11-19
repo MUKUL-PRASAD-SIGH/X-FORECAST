@@ -5,11 +5,11 @@ export * from './cyberpunk';
 export * from './charts';
 
 // Individual component exports
-export { default as MainDashboard } from './MainDashboard';
-export { default as ForecastingDashboard } from './ForecastingDashboard';
-export { default as PerformanceMonitoringDashboard } from './PerformanceMonitoringDashboard';
-export { default as CustomerAnalyticsDashboard } from './CustomerAnalyticsDashboard';
-export { default as ModelMonitoringDashboard } from './ModelMonitoringDashboard';
+export { MainDashboard } from './MainDashboard';
+export { ForecastingDashboard } from './ForecastingDashboard';
+export { PerformanceMonitoringDashboard } from './PerformanceMonitoringDashboard';
+export { CustomerAnalyticsDashboard } from './CustomerAnalyticsDashboard';
+export { ModelMonitoringDashboard } from './ModelMonitoringDashboard';
 
 // Cyberpunk Demo
 export { default as CyberpunkDashboardDemo } from './cyberpunk/CyberpunkDashboardDemo';

@@ -1,15 +1,13 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, ButtonHTMLAttributes } from 'react';
 import styled, { css } from 'styled-components';
 import { motion } from 'framer-motion';
 
-interface CyberpunkButtonProps {
+interface CyberpunkButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size'> {
   children: ReactNode;
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
-  disabled?: boolean;
-  loading?: boolean;
-  glitch?: boolean;
-  onClick?: () => void;
+  $variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  $size?: 'sm' | 'md' | 'lg';
+  $loading?: boolean;
+  $glitch?: boolean;
   className?: string;
 }
 
@@ -73,7 +71,13 @@ const sizeVariants = {
   `,
 };
 
-const StyledButton = styled(motion.button)<CyberpunkButtonProps>`
+const StyledButton = styled(motion.button).withConfig({
+  shouldForwardProp: (prop) => {
+    // Filter out transient props and styling-specific props
+    return !prop.startsWith('$') && 
+           !['variant', 'size', 'loading', 'glitch'].includes(prop);
+  }
+})<CyberpunkButtonProps>`
   font-family: ${props => props.theme.typography.fontFamily.primary};
   font-weight: ${props => props.theme.typography.fontWeight.bold};
   border-radius: 4px;
@@ -84,8 +88,8 @@ const StyledButton = styled(motion.button)<CyberpunkButtonProps>`
   text-transform: uppercase;
   letter-spacing: 1px;
   
-  ${props => buttonVariants[props.variant || 'primary']}
-  ${props => sizeVariants[props.size || 'md']}
+  ${props => buttonVariants[props.$variant || 'primary']}
+  ${props => sizeVariants[props.$size || 'md']}
   
   &:disabled {
     opacity: 0.5;
@@ -97,7 +101,7 @@ const StyledButton = styled(motion.button)<CyberpunkButtonProps>`
     }
   }
   
-  ${props => props.glitch && css`
+  ${props => props.$glitch && css`
     &:hover {
       animation: glitch 0.3s ease-in-out infinite alternate;
     }
@@ -120,7 +124,7 @@ const StyledButton = styled(motion.button)<CyberpunkButtonProps>`
   }
   
   /* Loading state */
-  ${props => props.loading && css`
+  ${props => props.$loading && css`
     &::after {
       content: '';
       position: absolute;
@@ -142,42 +146,42 @@ const StyledButton = styled(motion.button)<CyberpunkButtonProps>`
   `}
 `;
 
-const LoadingText = styled.span<{ loading?: boolean }>`
-  opacity: ${props => props.loading ? 0 : 1};
+const LoadingText = styled.span<{ $loading?: boolean }>`
+  opacity: ${props => props.$loading ? 0 : 1};
   transition: opacity 0.3s ease;
 `;
 
 export const CyberpunkButton: React.FC<CyberpunkButtonProps> = ({
   children,
-  variant = 'primary',
-  size = 'md',
+  $variant = 'primary',
+  $size = 'md',
   disabled = false,
-  loading = false,
-  glitch = false,
+  $loading = false,
+  $glitch = false,
   onClick,
   className,
   ...props
 }) => {
   const handleClick = () => {
-    if (!disabled && !loading && onClick) {
+    if (!disabled && !$loading && onClick) {
       onClick();
     }
   };
 
   return (
     <StyledButton
-      variant={variant}
-      size={size}
-      disabled={disabled || loading}
-      loading={loading}
-      glitch={glitch}
+      $variant={$variant}
+      $size={$size}
+      disabled={disabled || $loading}
+      $loading={$loading}
+      $glitch={$glitch}
       onClick={handleClick}
       className={className}
-      whileHover={{ scale: disabled || loading ? 1 : 1.05 }}
-      whileTap={{ scale: disabled || loading ? 1 : 0.95 }}
+      whileHover={{ scale: disabled || $loading ? 1 : 1.05 }}
+      whileTap={{ scale: disabled || $loading ? 1 : 0.95 }}
       {...props}
     >
-      <LoadingText loading={loading}>
+      <LoadingText $loading={$loading}>
         {children}
       </LoadingText>
     </StyledButton>

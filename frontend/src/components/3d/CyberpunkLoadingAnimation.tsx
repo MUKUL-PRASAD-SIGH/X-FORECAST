@@ -24,9 +24,11 @@ interface CyberpunkLoadingAnimationProps {
   animationIntensity?: number;
 }
 
-const LoadingContainer = styled(motion.div)<{ width: number; height: number; $isTraining?: boolean }>`
-  width: ${props => props.width}px;
-  height: ${props => props.height}px;
+const LoadingContainer = styled(motion.div).withConfig({
+  shouldForwardProp: (prop) => !['$width', '$height', '$isTraining'].includes(prop)
+})<{ $width: number; $height: number; $isTraining?: boolean }>`
+  width: ${props => props.$width}px;
+  height: ${props => props.$height}px;
   position: relative;
   background: 
     radial-gradient(circle at 50% 50%, rgba(0, 255, 255, 0.1) 0%, transparent 70%),
@@ -83,7 +85,9 @@ const StatusHeader = styled.div`
   text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
 `;
 
-const ProgressBar = styled.div<{ progress: number }>`
+const ProgressBar = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$progress'].includes(prop)
+})<{ $progress: number }>`
   width: 100%;
   height: 6px;
   background: rgba(255, 255, 255, 0.1);
@@ -98,7 +102,7 @@ const ProgressBar = styled.div<{ progress: number }>`
     top: 0;
     left: 0;
     height: 100%;
-    width: ${props => props.progress}%;
+    width: ${props => props.$progress}%;
     background: linear-gradient(90deg, #00ffff 0%, #ff1493 50%, #39ff14 100%);
     border-radius: 3px;
     transition: width 0.3s ease;
@@ -118,10 +122,12 @@ const ModelStatusGrid = styled.div`
   margin-top: 10px;
 `;
 
-const ModelStatusCard = styled.div<{ status: string }>`
+const ModelStatusCard = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$status'].includes(prop)
+})<{ $status: string }>`
   background: rgba(0, 0, 0, 0.7);
   border: 1px solid ${props => {
-    switch (props.status) {
+    switch (props.$status) {
       case 'completed': return '#39ff14';
       case 'training': return '#00ffff';
       case 'failed': return '#ff6b6b';
@@ -133,7 +139,7 @@ const ModelStatusCard = styled.div<{ status: string }>`
   font-size: 10px;
   text-align: center;
   color: ${props => {
-    switch (props.status) {
+    switch (props.$status) {
       case 'completed': return '#39ff14';
       case 'training': return '#00ffff';
       case 'failed': return '#ff6b6b';
@@ -141,7 +147,7 @@ const ModelStatusCard = styled.div<{ status: string }>`
     }
   }};
   
-  ${props => props.status === 'training' && `
+  ${props => props.$status === 'training' && `
     animation: cardPulse 1.5s ease-in-out infinite;
   `}
   
@@ -493,8 +499,8 @@ export const CyberpunkLoadingAnimation: React.FC<CyberpunkLoadingAnimationProps>
 }) => {
   return (
     <LoadingContainer
-      width={width}
-      height={height}
+      $width={width}
+      $height={height}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
@@ -502,14 +508,14 @@ export const CyberpunkLoadingAnimation: React.FC<CyberpunkLoadingAnimationProps>
     >
       <StatusOverlay>
         <StatusHeader>{trainingMessage}</StatusHeader>
-        <ProgressBar progress={overallProgress} />
+        <ProgressBar $progress={overallProgress} />
         <div style={{ textAlign: 'center', fontSize: '12px', color: '#ffffff', marginTop: '5px' }}>
           Overall Progress: {overallProgress.toFixed(1)}%
         </div>
         
         <ModelStatusGrid>
           {modelStatuses.map((model) => (
-            <ModelStatusCard key={model.model} status={model.status}>
+            <ModelStatusCard key={model.model} $status={model.status}>
               <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
                 {model.model.toUpperCase()}
               </div>

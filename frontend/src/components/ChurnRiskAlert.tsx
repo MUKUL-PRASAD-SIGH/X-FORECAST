@@ -467,7 +467,7 @@ export const ChurnRiskAlert: React.FC<ChurnRiskAlertProps> = ({
 
   if (!churnRisks || churnRisks.length === 0) {
     return (
-      <CyberpunkCard variant="glass">
+      <CyberpunkCard $variant="glass">
         <div style={{ textAlign: 'center', padding: '2rem' }}>
           <span style={{ fontSize: '2rem' }}>✅</span>
           <h3 style={{ color: '#39ff14', margin: '1rem 0' }}>No Churn Risks Detected</h3>

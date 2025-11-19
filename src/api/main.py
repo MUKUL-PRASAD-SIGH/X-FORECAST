@@ -3,7 +3,7 @@ FastAPI Backend for Cyberpunk AI Dashboard
 Unified API endpoints for integrated analytics, forecasting, and real-time data
 """
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, BackgroundTasks, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -65,20 +65,67 @@ except ImportError:
 
 from ..ai_chatbot.conversational_ai import ConversationalAI, ChatResponse
 try:
-    from ..api.auth_endpoints_dev import router as auth_router
+    from ..api.auth_endpoints import router as auth_router
 except ImportError as e:
-    print(f"Auth endpoints not available: {e}")
-    auth_router = None
-
-# Auto-initialize SuperX data
-async def auto_init_superx():
-    """Auto-initialize SuperX data on startup"""
+    print(f"Real auth endpoints not available: {e}")
+    # Fallback to dev endpoints if real ones not available
     try:
-        from ..api.auth_endpoints_dev import load_superx_combined_data
-        await load_superx_combined_data()
-        print("SuperX data auto-loaded")
-    except Exception as e:
-        print(f"Auto-init error: {e}")
+        from ..api.auth_endpoints_dev import router as auth_router
+        print("Using development auth endpoints")
+    except ImportError:
+        print("No auth endpoints available")
+        auth_router = None
+
+# Authentication middleware
+from fastapi import Request, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+
+async def verify_token_middleware(request: Request, call_next):
+    """Middleware to verify JWT tokens on protected routes"""
+    # Skip authentication for public routes
+    public_routes = [
+        "/",
+        "/docs",
+        "/openapi.json",
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/status"
+    ]
+    
+    if request.url.path in public_routes or request.url.path.startswith("/docs"):
+        response = await call_next(request)
+        return response
+    
+    # Check for Authorization header on protected routes
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        # For API routes, require authentication
+        if request.url.path.startswith("/api/"):
+            raise HTTPException(status_code=401, detail="Authentication required")
+    else:
+        # Verify token if provided
+        try:
+            from ..auth.user_management import user_manager
+            token = auth_header.split(" ")[1]
+            user_data = user_manager.verify_token(token)
+            if not user_data:
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
+            # Add user data to request state
+            request.state.user = user_data
+        except Exception as e:
+            if request.url.path.startswith("/api/"):
+                raise HTTPException(status_code=401, detail="Invalid authentication token")
+    
+    response = await call_next(request)
+    return response
+
+def get_current_user(request: Request):
+    """Get current authenticated user from request state"""
+    if not hasattr(request.state, 'user'):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return request.state.user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -149,9 +196,6 @@ async def lifespan(app: FastAPI):
     
     # Start background tasks
     asyncio.create_task(start_background_tasks())
-    
-    # Auto-initialize SuperX
-    asyncio.create_task(auto_init_superx())
     
     # Initialize training progress API if available
     try:
@@ -261,6 +305,26 @@ except ImportError:
     ENSEMBLE_CHAT_AVAILABLE = False
     logger.warning("Ensemble chat API not available")
 
+# Include PDF processing API
+try:
+    from .pdf_processing_api import router as pdf_processing_router
+    app.include_router(pdf_processing_router, tags=["PDF Processing"])
+    PDF_PROCESSING_AVAILABLE = True
+    logger.info("PDF processing API included")
+except ImportError:
+    PDF_PROCESSING_AVAILABLE = False
+    logger.warning("PDF processing API not available")
+
+# Include RAG management API
+try:
+    from .rag_management_api import router as rag_management_router
+    app.include_router(rag_management_router, tags=["RAG Management"])
+    RAG_MANAGEMENT_AVAILABLE = True
+    logger.info("RAG management API included")
+except ImportError:
+    RAG_MANAGEMENT_AVAILABLE = False
+    logger.warning("RAG management API not available")
+
 # Include enhanced ensemble API
 try:
     from .ensemble_api import router as ensemble_api_router
@@ -271,111 +335,156 @@ except ImportError:
     ENSEMBLE_API_AVAILABLE = False
     logger.warning("Enhanced ensemble API not available")
 
-# Add bypass endpoint for direct SuperX access
-@app.post("/api/v1/superx/chat")
-async def superx_direct_chat(message: dict):
-    """Direct SuperX chat without authentication"""
-    try:
-        from ..api.auth_endpoints_dev import real_vector_rag
-        user_id = "user_1"
-        query = message.get("message", "")
-        
-        rag_response = real_vector_rag.generate_personalized_response(user_id, query)
-        
-        return {
-            "response_id": f"superx_{int(datetime.now().timestamp())}",
-            "response_text": rag_response.response_text,
-            "confidence": rag_response.confidence,
-            "is_personalized": True,
-            "company_name": "SuperX Corporation",
-            "sources": rag_response.sources,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        return {
-            "response_text": "SuperX AI: I'm ready to help with your retail business. Ask me about products, sales, or forecasting!",
-            "confidence": 0.8,
-            "company_name": "SuperX Corporation"
-        }
-
-@app.post("/api/v1/superx/upload")
-async def superx_direct_upload(file: UploadFile = File(...)):
-    """Direct SuperX upload without authentication"""
-    try:
-        from ..api.auth_endpoints_dev import real_vector_rag
-        
-        # Save file
-        user_dir = "data/users/user_1"
-        os.makedirs(user_dir, exist_ok=True)
-        
-        file_path = os.path.join(user_dir, file.filename)
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        # Update RAG
-        success = real_vector_rag.update_user_data("user_1", file_path)
-        
-        return {
-            "success": success,
-            "message": f"SuperX data updated with {file.filename}",
-            "file_saved": file_path
-        }
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+# Removed SuperX bypass endpoints - authentication now required
 
 @app.post("/api/v1/upload-enhanced")
-async def enhanced_ensemble_upload(file: UploadFile = File(...)):
-    """Enhanced ensemble data upload with parameter detection"""
+async def enhanced_ensemble_upload(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Enhanced ensemble data upload with parameter detection for CSV and PDF files"""
     try:
-        # Save file
-        user_dir = "data/uploads"
-        os.makedirs(user_dir, exist_ok=True)
+        file_extension = file.filename.lower().split('.')[-1]
         
-        file_path = os.path.join(user_dir, file.filename)
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
+        if file_extension == 'csv':
+            # Handle CSV upload (existing logic)
+            user_dir = f"data/users/{current_user['user_id']}/csv"
+            os.makedirs(user_dir, exist_ok=True)
+            
+            file_path = os.path.join(user_dir, file.filename)
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            # Read and analyze CSV
+            df = pd.read_csv(file_path)
+            
+            # Parameter detection
+            detected_params = {
+                "columns": list(df.columns),
+                "rows": len(df),
+                "date_columns": [col for col in df.columns if 'date' in col.lower()],
+                "numeric_columns": list(df.select_dtypes(include=[np.number]).columns),
+                "categorical_columns": list(df.select_dtypes(include=['object']).columns)
+            }
+            
+            # Data quality assessment
+            quality_score = 1.0 - (df.isnull().sum().sum() / (len(df) * len(df.columns)))
+            
+            # Integrate with RAG system
+            try:
+                from ..rag.real_vector_rag import real_vector_rag
+                company_name = current_user.get("company_name", "Unknown Company")
+                real_vector_rag.load_company_data(current_user['user_id'], company_name, file_path)
+            except Exception as rag_error:
+                logger.warning(f"RAG integration failed: {rag_error}")
+            
+            return {
+                "success": True,
+                "message": "CSV upload and analysis successful",
+                "file_type": "csv",
+                "file_path": file_path,
+                "detected_parameters": detected_params,
+                "data_quality_score": quality_score,
+                "processing_status": "parameter_detection_complete"
+            }
+            
+        elif file_extension == 'pdf':
+            # Handle PDF upload
+            user_dir = f"data/users/{current_user['user_id']}/pdf"
+            os.makedirs(user_dir, exist_ok=True)
+            
+            file_path = os.path.join(user_dir, file.filename)
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+            
+            # Process PDF
+            try:
+                from ..rag.real_vector_rag import real_vector_rag
+                company_name = current_user.get("company_name", "Unknown Company")
+                
+                success = real_vector_rag.add_pdf_document(current_user['user_id'], company_name, file_path)
+                
+                if success:
+                    return {
+                        "success": True,
+                        "message": "PDF upload and processing successful",
+                        "file_type": "pdf",
+                        "file_path": file_path,
+                        "processing_status": "pdf_processing_complete"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": "PDF processing failed",
+                        "file_type": "pdf",
+                        "processing_status": "failed"
+                    }
+                    
+            except Exception as pdf_error:
+                logger.error(f"PDF processing error: {pdf_error}")
+                return {
+                    "success": False,
+                    "message": f"PDF processing error: {str(pdf_error)}",
+                    "file_type": "pdf",
+                    "processing_status": "failed"
+                }
         
-        # Read and analyze CSV
-        df = pd.read_csv(file_path)
-        
-        # Parameter detection
-        detected_params = {
-            "columns": list(df.columns),
-            "rows": len(df),
-            "date_columns": [col for col in df.columns if 'date' in col.lower()],
-            "numeric_columns": list(df.select_dtypes(include=[np.number]).columns),
-            "categorical_columns": list(df.select_dtypes(include=['object']).columns)
-        }
-        
-        # Data quality assessment
-        quality_score = 1.0 - (df.isnull().sum().sum() / (len(df) * len(df.columns)))
-        
-        return {
-            "success": True,
-            "message": "Enhanced upload successful",
-            "file_path": file_path,
-            "detected_parameters": detected_params,
-            "data_quality_score": quality_score,
-            "processing_status": "parameter_detection_complete"
-        }
+        else:
+            return {
+                "success": False,
+                "message": f"Unsupported file type: {file_extension}. Only CSV and PDF files are supported.",
+                "processing_status": "failed"
+            }
         
     except Exception as e:
+        logger.error(f"Upload error: {str(e)}")
         return {
             "success": False,
             "message": str(e),
             "processing_status": "failed"
         }
 
-# Add CORS middleware
+# Add CORS middleware with enhanced configuration for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://localhost:3001",  # Frontend dev server
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",  # Frontend dev server (127.0.0.1)
+        "https://your-production-domain.com"  # Add production domain
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Added PATCH and explicit OPTIONS
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "X-CSRF-Token",
+        "Cache-Control"
+    ],
+    expose_headers=["*"],  # Allow frontend to access response headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Add authentication middleware
+app.middleware("http")(verify_token_middleware)
+
+# Add explicit OPTIONS handler for authentication endpoints
+@app.options("/api/v1/auth/{path:path}")
+async def auth_options_handler(path: str):
+    """Handle preflight requests for authentication endpoints"""
+    return JSONResponse(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Accept, Accept-Language, Content-Language, Content-Type, Authorization, X-Requested-With, X-CSRF-Token, Cache-Control",
+            "Access-Control-Max-Age": "3600"
+        }
+    )
 
 # Add ensemble security middleware
 try:
@@ -528,7 +637,7 @@ async def get_system_health() -> SystemHealthResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/forecast")
-async def generate_forecast(request: ForecastRequest):
+async def generate_forecast(request: ForecastRequest, current_user: dict = Depends(get_current_user)):
     """Generate integrated demand and customer retention forecast"""
     try:
         if not forecasting_engine:
@@ -613,7 +722,7 @@ async def generate_forecast(request: ForecastRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/retention")
-async def analyze_customer_retention():
+async def analyze_customer_retention(current_user: dict = Depends(get_current_user)):
     """Analyze customer retention and generate insights"""
     try:
         if not retention_analyzer:
@@ -690,14 +799,15 @@ async def analyze_customer_retention():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/chat")
-async def chat_with_ai(message: ChatMessage):
+async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_current_user)):
     """Chat with AI assistant about forecasts and business data"""
     try:
         if not conversational_ai:
             raise HTTPException(status_code=503, detail="Conversational AI not initialized")
         
         user_context = {
-            "user_id": message.user_id,
+            "user_id": current_user["user_id"],
+            "company_name": current_user.get("company_name"),
             "session_id": message.session_id
         }
         

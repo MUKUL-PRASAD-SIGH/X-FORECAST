@@ -193,15 +193,32 @@ test_*.py
 *_test.py
 *test*.py
 simple_test.py
+simple-test.py
 demo_working.py
 simple_integration_test.py
-test_adaptive_integration*.py
-test_weight_adaptation_system.py
-test_ensemble_engine.py
-test_api_simple.py
-test_company_sales_working.py
-test_system_working.py
 run_tests.py
+
+# Test reports and outputs
+*benchmark_report*.json
+*integration_report*.json
+*test_results*.json
+*performance_report*.json
+test_*.html
+test_*.xml
+test_*.csv
+
+# Test directories and outputs
+test_output/
+test_automated_training/
+test_failure_handling/
+test_model_versions/
+test_version_comparison/
+training_monitoring/
+progressive_integration/
+model_version_management/
+model_versions/
+
+# Frontend test files
 frontend/src/components/__tests__/
 frontend/coverage/
 frontend/test-results/
@@ -209,25 +226,80 @@ frontend/.nyc_output/
 jest.config.js
 vitest.config.js
 
-# Documentation files (keep only README.md and STARTUP_INSTRUCTIONS.md)
+# Python test configuration
+pytest.ini
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Test databases and cache
+test_*.db
+test_*.sqlite
+test_*.sqlite3
+*_test.db
+
+# Test artifacts and generated files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Test environment files
+.env.test
+.env.testing
+test.env
+testing.env
+
+# Jupyter notebook checkpoints (if used for testing)
+.ipynb_checkpoints
+
+# VS Code test settings
+.vscode/settings.json
+.vscode/launch.json
+
+# PyCharm test configurations
+.idea/runConfigurations/
+
+# Documentation files are now organized in docs/ folder
+# Keep only essential README files in root
+!README.md
+!tests/README.md
+!docs/
+
+# Ignore any stray documentation files in root
 *_SUMMARY.md
 TASK_*_SUMMARY.md
-CYBERPUNK_AI_DASHBOARD_SUMMARY.md
-ADAPTIVE_ENSEMBLE_INTEGRATION_SUMMARY.md
-COMPANY_SALES_SYSTEM_README.md
-START_SYSTEM.md
-AUTHENTICATION_FIX_SUMMARY.md
+*_GUIDE.md
+*_DOCUMENTATION.md
 DEPLOYMENT_GUIDE.md
-DOCUMENTATION.md
-FILE_STRUCTURE.md
-FINAL_PROJECT_STATUS.md
-NETLIFY_DEPLOYMENT.md
 PROJECT_OVERVIEW.md
-README_SIMPLE.md
-VECTOR_RAG_SETUP.md
-WINDOWS_SETUP.md
+STARTUP_INSTRUCTIONS.md
 
-# Development and demo files
+# Development and demo files (keep only main superx_final_system.py)
 start_*.py
 demo_*.py
 simple_*.py
@@ -243,8 +315,12 @@ quick_setup.py
 setup_dev_environment.py
 simple_auth_test.py
 simple_server.py
-superx_*.py
 web_server.py
+
+# SuperX system files (keep only the main one)
+superx_complete_system.py
+superx_simple_complete.py
+!superx_final_system.py
 
 # Non-functional/demo interface components
 frontend/src/components/effects/

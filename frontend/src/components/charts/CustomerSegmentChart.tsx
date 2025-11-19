@@ -19,6 +19,10 @@ import {
   Pie
 } from 'recharts';
 
+// Type fix for Recharts components
+const PolarAngleAxisFixed = PolarAngleAxis as any;
+const PolarRadiusAxisFixed = PolarRadiusAxis as any;
+
 interface CustomerSegment {
   segment_id: string;
   segment_name: string;
@@ -346,12 +350,12 @@ export const CustomerSegmentChart: React.FC<CustomerSegmentChartProps> = ({
   const renderRadarChart = () => (
     <ResponsiveContainer width="100%" height="70%">
       <RadarChart data={radarChartData[0] ? [radarChartData[0]] : []}>
-        <PolarGrid stroke="rgba(57, 255, 20, 0.3)" />
-        <PolarAngleAxis 
-          dataKey="subject" 
-          tick={{ fontSize: 12, fill: '#39ff14', fontFamily: 'Courier New' }}
         />
-        <PolarRadiusAxis 
+        <PolarRadiusAxisFixed 
+          angle={90} 
+          domain={[0, 100]}
+          tick={{ fontSize: 10, fill: '#39ff14' }}
+        />olarRadiusAxis 
           angle={90} 
           domain={[0, 100]}
           tick={{ fontSize: 10, fill: '#39ff14' }}

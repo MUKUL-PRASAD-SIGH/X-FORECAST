@@ -288,9 +288,9 @@ export const MainDashboard: React.FC = () => {
   const [activeView, setActiveView] = useState('company');
   const [loading, setLoading] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Always authenticated
-  const [user, setUser] = useState<any>({ email: 'superx@demo.com', company_name: 'SuperX Corporation' });
-  const [authToken, setAuthToken] = useState<string | null>('superx_demo_token');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     totalCustomers: 0,
     retentionRate: 0,
@@ -306,11 +306,22 @@ export const MainDashboard: React.FC = () => {
   });
   const [isConnected, setIsConnected] = useState(false);
 
-  // Auto-authenticate as SuperX
+  // Check for existing authentication on component mount
   useEffect(() => {
-    setAuthToken('superx_demo_token');
-    setIsAuthenticated(true);
-    setUser({ email: 'superx@demo.com', company_name: 'SuperX Corporation' });
+    const token = localStorage.getItem('auth_token');
+    const userData = localStorage.getItem('user_data');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setAuthToken(token);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Error parsing stored user data:', error);
+        handleLogout();
+      }
+    }
   }, []);
 
   // Simulate real-time data updates
@@ -394,6 +405,8 @@ export const MainDashboard: React.FC = () => {
   ];
 
   const handleLogin = (token: string, userData: any) => {
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('user_data', JSON.stringify(userData));
     setAuthToken(token);
     setUser(userData);
     setIsAuthenticated(true);
@@ -401,6 +414,7 @@ export const MainDashboard: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_data');
     setAuthToken(null);
     setUser(null);
     setIsAuthenticated(false);
@@ -431,18 +445,19 @@ export const MainDashboard: React.FC = () => {
 
         {/* Integrated Data Upload Section */}
         <DataUpload 
-          authToken={authToken!} 
+          authToken={authToken} 
           onUploadComplete={(result) => {
             console.log('Data uploaded successfully:', result);
             // Automatically switch to models view to show ensemble status
             if (result.success && result.models_initialized) {
               setTimeout(() => setActiveView('models'), 2000);
             }
-          }} 
+          }}
+          onAuthError={handleLogout}
         />
 
         {/* Ensemble Status Section */}
-        <EnsembleStatus authToken={authToken!} />
+        <EnsembleStatus authToken={authToken} />
   
         <ContentGrid>
           <DemoCard variant="glass" hover>
@@ -504,11 +519,11 @@ export const MainDashboard: React.FC = () => {
   };
 
   const renderForecastingContent = () => (
-    <ForecastingDashboard authToken={authToken!} />
+    <ForecastingDashboard authToken={authToken} />
   );
 
   const renderAnalyticsContent = () => (
-    <CustomerAnalyticsDashboard authToken={authToken!} />
+    <CustomerAnalyticsDashboard authToken={authToken} />
   );
 
   const renderInsightsContent = () => (
@@ -582,7 +597,10 @@ export const MainDashboard: React.FC = () => {
     </ContentGrid>
   );
 
-  // Login bypassed - always show dashboard
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return <LoginForm onLogin={handleLogin} />;
+  }
 
   return (
     <DashboardContainer>
@@ -708,8 +726,8 @@ export const MainDashboard: React.FC = () => {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            <EnsembleStatus authToken={authToken!} />
-            <ModelMonitoringDashboard authToken={authToken!} />
+            <EnsembleStatus authToken={authToken} />
+            <ModelMonitoringDashboard authToken={authToken} />
           </motion.div>
         )}
         

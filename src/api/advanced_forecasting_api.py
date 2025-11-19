@@ -176,10 +176,26 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://localhost:3001",  # Frontend dev server
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",  # Frontend dev server (127.0.0.1)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "X-CSRF-Token",
+        "Cache-Control"
+    ],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # REST API Endpoints

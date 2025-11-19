@@ -96,9 +96,11 @@ const LoaderContainer = styled.div`
 `;
 
 // Spinner Loader
-const SpinnerLoader = styled.div<{ size: string; color: string }>`
-  ${props => sizeVariants[props.size as keyof typeof sizeVariants]}
-  ${props => colorVariants[props.color as keyof typeof colorVariants]}
+const SpinnerLoader = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$size', '$color'].includes(prop)
+})<{ $size: string; $color: string }>`
+  ${props => sizeVariants[props.$size as keyof typeof sizeVariants]}
+  ${props => colorVariants[props.$color as keyof typeof colorVariants]}
   
   border: 3px solid transparent;
   border-top: 3px solid currentColor;
@@ -120,28 +122,34 @@ const SpinnerLoader = styled.div<{ size: string; color: string }>`
 `;
 
 // Matrix Loader
-const MatrixContainer = styled.div<{ size: string }>`
-  ${props => sizeVariants[props.size as keyof typeof sizeVariants]}
+const MatrixContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$size'].includes(prop)
+})<{ $size: string }>`
+  ${props => sizeVariants[props.$size as keyof typeof sizeVariants]}
   position: relative;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.8);
   border: 1px solid ${props => props.theme.colors.acidGreen};
 `;
 
-const MatrixColumn = styled.div<{ delay: number }>`
+const MatrixColumn = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$delay'].includes(prop)
+})<{ $delay: number }>`
   position: absolute;
   top: 0;
   width: 2px;
   height: 100%;
   background: linear-gradient(transparent, ${props => props.theme.colors.acidGreen}, transparent);
   animation: ${matrixRain} 2s linear infinite;
-  animation-delay: ${props => props.delay}s;
+  animation-delay: ${props => props.$delay}s;
 `;
 
 // Pulse Loader
-const PulseLoader = styled.div<{ size: string; color: string }>`
-  ${props => sizeVariants[props.size as keyof typeof sizeVariants]}
-  ${props => colorVariants[props.color as keyof typeof colorVariants]}
+const PulseLoader = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$size', '$color'].includes(prop)
+})<{ $size: string; $color: string }>`
+  ${props => sizeVariants[props.$size as keyof typeof sizeVariants]}
+  ${props => colorVariants[props.$color as keyof typeof colorVariants]}
   
   border-radius: 50%;
   background: currentColor;
@@ -150,9 +158,11 @@ const PulseLoader = styled.div<{ size: string; color: string }>`
 `;
 
 // Glitch Loader
-const GlitchLoader = styled.div<{ size: string; color: string }>`
-  ${props => sizeVariants[props.size as keyof typeof sizeVariants]}
-  ${props => colorVariants[props.color as keyof typeof colorVariants]}
+const GlitchLoader = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$size', '$color'].includes(prop)
+})<{ $size: string; $color: string }>`
+  ${props => sizeVariants[props.$size as keyof typeof sizeVariants]}
+  ${props => colorVariants[props.$color as keyof typeof colorVariants]}
   
   position: relative;
   background: currentColor;
@@ -183,8 +193,10 @@ const GlitchLoader = styled.div<{ size: string; color: string }>`
 `;
 
 // Hologram Loader
-const HologramLoader = styled.div<{ size: string }>`
-  ${props => sizeVariants[props.size as keyof typeof sizeVariants]}
+const HologramLoader = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$size'].includes(prop)
+})<{ $size: string }>`
+  ${props => sizeVariants[props.$size as keyof typeof sizeVariants]}
   
   position: relative;
   border: 2px solid ${props => props.theme.colors.neonBlue};
@@ -249,11 +261,11 @@ export const CyberpunkLoader: React.FC<CyberpunkLoaderProps> = ({
     switch (variant) {
       case 'matrix':
         return (
-          <MatrixContainer size={size}>
+          <MatrixContainer $size={size}>
             {Array.from({ length: 8 }, (_, i) => (
               <MatrixColumn
                 key={i}
-                delay={i * 0.2}
+                $delay={i * 0.2}
                 style={{ left: `${(i * 12.5)}%` }}
               />
             ))}
@@ -261,16 +273,16 @@ export const CyberpunkLoader: React.FC<CyberpunkLoaderProps> = ({
         );
       
       case 'pulse':
-        return <PulseLoader size={size} color={color} />;
+        return <PulseLoader $size={size} $color={color} />;
       
       case 'glitch':
-        return <GlitchLoader size={size} color={color} />;
+        return <GlitchLoader $size={size} $color={color} />;
       
       case 'hologram':
-        return <HologramLoader size={size} />;
+        return <HologramLoader $size={size} />;
       
       default:
-        return <SpinnerLoader size={size} color={color} />;
+        return <SpinnerLoader $size={size} $color={color} />;
     }
   };
 

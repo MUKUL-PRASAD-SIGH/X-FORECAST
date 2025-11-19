@@ -38,14 +38,16 @@ const InputWrapper = styled.div`
   align-items: center;
 `;
 
-const StyledInput = styled(motion.input)<{ hasIcon?: boolean; hasError?: boolean; glitch?: boolean }>`
+const StyledInput = styled(motion.input).withConfig({
+  shouldForwardProp: (prop) => !['$hasIcon', '$hasError', '$glitch'].includes(prop)
+})<{ $hasIcon?: boolean; $hasError?: boolean; $glitch?: boolean }>`
   width: 100%;
   padding: ${props => props.theme.spacing.sm} ${props => props.theme.spacing.md};
-  padding-left: ${props => props.hasIcon ? '40px' : props.theme.spacing.md};
+  padding-left: ${props => props.$hasIcon ? '40px' : props.theme.spacing.md};
   font-family: ${props => props.theme.typography.fontFamily.mono};
   font-size: ${props => props.theme.typography.fontSize.md};
   background: rgba(20, 20, 20, 0.8);
-  border: 2px solid ${props => props.hasError ? props.theme.colors.error : props.theme.colors.neonBlue};
+  border: 2px solid ${props => props.$hasError ? props.theme.colors.error : props.theme.colors.neonBlue};
   border-radius: 4px;
   color: ${props => props.theme.colors.primaryText};
   transition: all 0.3s ease;
@@ -57,8 +59,8 @@ const StyledInput = styled(motion.input)<{ hasIcon?: boolean; hasError?: boolean
   
   &:focus {
     outline: none;
-    border-color: ${props => props.hasError ? props.theme.colors.error : props.theme.colors.hotPink};
-    box-shadow: ${props => props.hasError ? 
+    border-color: ${props => props.$hasError ? props.theme.colors.error : props.theme.colors.hotPink};
+    box-shadow: ${props => props.$hasError ? 
       '0 0 20px rgba(255, 0, 64, 0.3)' : 
       props.theme.effects.softGlow
     };
@@ -71,7 +73,7 @@ const StyledInput = styled(motion.input)<{ hasIcon?: boolean; hasError?: boolean
     background: rgba(10, 10, 10, 0.5);
   }
   
-  ${props => props.glitch && css`
+  ${props => props.$glitch && css`
     &:focus {
       animation: glitch 0.3s ease-in-out infinite alternate;
     }
@@ -116,18 +118,20 @@ const ErrorMessage = styled(motion.div)`
   text-shadow: 0 0 10px rgba(255, 0, 64, 0.5);
 `;
 
-const GlowEffect = styled.div<{ focused: boolean; hasError?: boolean }>`
+const GlowEffect = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$focused', '$hasError'].includes(prop)
+})<{ $focused: boolean; $hasError?: boolean }>`
   position: absolute;
   top: -2px;
   left: -2px;
   right: -2px;
   bottom: -2px;
   border-radius: 6px;
-  background: ${props => props.hasError ? 
+  background: ${props => props.$hasError ? 
     'linear-gradient(45deg, #FF0040, #FF1493)' : 
     'linear-gradient(45deg, #00FFFF, #FF1493, #39FF14)'
   };
-  opacity: ${props => props.focused ? 0.3 : 0};
+  opacity: ${props => props.$focused ? 0.3 : 0};
   transition: opacity 0.3s ease;
   z-index: -1;
   filter: blur(4px);
@@ -169,7 +173,7 @@ export const CyberpunkInput = forwardRef<HTMLInputElement, CyberpunkInputProps>(
     <InputContainer className={className}>
       {label && <Label>{label}</Label>}
       <InputWrapper>
-        <GlowEffect focused={focused} hasError={!!error} />
+        <GlowEffect $focused={focused} $hasError={!!error} />
         {icon && <IconContainer>{icon}</IconContainer>}
         <StyledInput
           ref={ref}
@@ -180,9 +184,9 @@ export const CyberpunkInput = forwardRef<HTMLInputElement, CyberpunkInputProps>(
           onFocus={handleFocus}
           onBlur={handleBlur}
           disabled={disabled}
-          hasIcon={!!icon}
-          hasError={!!error}
-          glitch={glitch}
+          $hasIcon={!!icon}
+          $hasError={!!error}
+          $glitch={glitch}
           whileFocus={{ scale: 1.02 }}
           {...props}
         />

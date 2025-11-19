@@ -685,7 +685,7 @@ Would you like to create an action plan for this item?
 
           {/* Confidence Summary */}
           {recommendations?.confidence_summary && (
-            <CyberpunkCard variant="hologram">
+            <CyberpunkCard $variant="hologram">
               <SectionTitle>📊 Confidence Summary</SectionTitle>
               <div style={{ marginTop: '1rem' }}>
                 <ConfidenceIndicator
@@ -704,7 +704,7 @@ Would you like to create an action plan for this item?
 
           {/* Expected Outcomes */}
           {recommendations?.expected_outcomes && (
-            <CyberpunkCard variant="glass">
+            <CyberpunkCard $variant="glass">
               <SectionTitle>🎯 Expected Outcomes</SectionTitle>
               <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ textAlign: 'center' }}>

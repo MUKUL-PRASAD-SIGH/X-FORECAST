@@ -1,11 +1,12 @@
 """
 Real Vector RAG System - Personalized for Each Company Login
 Uses actual vector embeddings and preprocessing for scalable multi-tenant RAG
+Enhanced with PDF processing capabilities for document-based knowledge
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 import json
 import os
 from datetime import datetime
@@ -14,12 +15,27 @@ import pickle
 from sentence_transformers import SentenceTransformer
 import faiss
 from dataclasses import dataclass
+import logging
+
+# Import PDF processor
+from .pdf_processor import PDFProcessor, PDFExtractionResult, PDFMetadata
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class DocumentSource:
+    """Source attribution for RAG responses"""
+    type: str  # 'csv' or 'pdf'
+    filename: str
+    page_number: Optional[int] = None
+    relevance_score: float = 0.0
+    doc_id: str = ""
 
 @dataclass
 class RAGResponse:
     response_text: str
     confidence: float
-    sources: List[str]
+    sources: List[DocumentSource]
     company_context: str
 
 class RealVectorRAG:
@@ -29,6 +45,7 @@ class RealVectorRAG:
         self.user_documents = {}  # Document store per user
         self.user_metadata = {}  # Company metadata per user
         self.db_path = "rag_vector_db.db"
+        self.pdf_processor = PDFProcessor()
         self._init_database()
     
     def _init_database(self):
@@ -45,8 +62,30 @@ class RealVectorRAG:
                 content TEXT NOT NULL,
                 metadata TEXT,
                 embedding BLOB,
+                document_type TEXT DEFAULT 'csv',
+                source_file TEXT,
+                page_number INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, doc_id)
+            )
+        ''')
+        
+        # Add PDF documents tracking table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_documents (
+                document_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                file_type TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processing_status TEXT DEFAULT 'pending',
+                file_size INTEGER,
+                page_count INTEGER DEFAULT 0,
+                file_hash TEXT,
+                metadata TEXT,
+                error_message TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
         ''')
         
@@ -164,7 +203,8 @@ class RealVectorRAG:
         
         return documents
     
-    def _add_document(self, user_id: str, company_name: str, doc_id: str, content: str, metadata: Dict):
+    def _add_document(self, user_id: str, company_name: str, doc_id: str, content: str, metadata: Dict, 
+                     document_type: str = 'csv', source_file: str = None, page_number: int = None):
         """Add document with embedding to database"""
         embedding = self.model.encode([content])[0]
         
@@ -173,9 +213,10 @@ class RealVectorRAG:
         
         cursor.execute('''
             INSERT OR REPLACE INTO user_vectors 
-            (user_id, company_name, doc_id, content, metadata, embedding)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (user_id, company_name, doc_id, content, json.dumps(metadata), pickle.dumps(embedding)))
+            (user_id, company_name, doc_id, content, metadata, embedding, document_type, source_file, page_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, company_name, doc_id, content, json.dumps(metadata), pickle.dumps(embedding), 
+              document_type, source_file, page_number))
         
         conn.commit()
         conn.close()
@@ -186,7 +227,7 @@ class RealVectorRAG:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT doc_id, content, metadata, embedding 
+            SELECT doc_id, content, metadata, embedding, document_type, source_file, page_number
             FROM user_vectors WHERE user_id = ?
         ''', (user_id,))
         
@@ -200,13 +241,16 @@ class RealVectorRAG:
         embeddings = []
         documents = []
         
-        for doc_id, content, metadata, embedding_blob in results:
+        for doc_id, content, metadata, embedding_blob, document_type, source_file, page_number in results:
             embedding = pickle.loads(embedding_blob)
             embeddings.append(embedding)
             documents.append({
                 'doc_id': doc_id,
                 'content': content,
-                'metadata': json.loads(metadata)
+                'metadata': json.loads(metadata),
+                'document_type': document_type or 'csv',
+                'source_file': source_file,
+                'page_number': page_number
             })
         
         embeddings = np.array(embeddings).astype('float32')
@@ -280,29 +324,39 @@ class RealVectorRAG:
         return results
     
     def generate_personalized_response(self, user_id: str, query: str) -> RAGResponse:
-        """Generate personalized response using vector RAG"""
+        """Generate personalized response using enhanced vector RAG with PDF support"""
         # Get company context
         company_name = self.user_metadata.get(user_id, {}).get("company_name", "Unknown Company")
         
-        # Retrieve relevant documents
-        relevant_docs = self.query_user_knowledge(user_id, query, top_k=3)
+        # Retrieve relevant documents using enhanced query
+        relevant_docs = self.query_user_knowledge_enhanced(user_id, query, top_k=5)
         
         if not relevant_docs:
             return RAGResponse(
-                response_text=f"I don't have specific data for {company_name} yet. Please upload your company data to get personalized insights.",
+                response_text=f"I don't have specific data for {company_name} yet. Please upload your company data (CSV files for analytics or PDF documents for knowledge) to get personalized insights.",
                 confidence=0.3,
                 sources=[],
                 company_context=company_name
             )
         
         # Generate response based on retrieved documents
-        response_text = self._generate_contextual_response(query, relevant_docs, company_name)
+        response_text = self._generate_contextual_response_enhanced(query, relevant_docs, company_name)
         
         # Calculate confidence based on similarity scores
         avg_score = np.mean([doc['score'] for doc in relevant_docs])
         confidence = min(0.95, avg_score * 1.2)
         
-        sources = [doc['doc_id'] for doc in relevant_docs]
+        # Create DocumentSource objects for better attribution
+        sources = []
+        for doc in relevant_docs:
+            source = DocumentSource(
+                type=doc.get('document_type', 'csv'),
+                filename=doc.get('source_file', 'Unknown'),
+                page_number=doc.get('page_number'),
+                relevance_score=doc['score'],
+                doc_id=doc['doc_id']
+            )
+            sources.append(source)
         
         return RAGResponse(
             response_text=response_text,
@@ -357,6 +411,106 @@ class RealVectorRAG:
         context_summary = f"I have data on {len(products)} products" if products else "your business data"
         return f"🤖 **{company_name} AI Assistant**:\n\nBased on {context_summary}, I can help with:\n• Product analysis\n• Revenue insights\n• Forecasting\n• Business recommendations\n\nWhat specific area interests you?"
     
+    def _generate_contextual_response_enhanced(self, query: str, docs: List[Dict], company_name: str) -> str:
+        """Generate enhanced contextual response from retrieved documents including PDF content"""
+        query_lower = query.lower()
+        
+        # Separate PDF and CSV documents
+        pdf_docs = [doc for doc in docs if doc.get('document_type') == 'pdf']
+        csv_docs = [doc for doc in docs if doc.get('document_type') == 'csv']
+        
+        # Extract information from CSV documents (existing logic)
+        products = []
+        categories = []
+        revenues = []
+        
+        for doc in csv_docs:
+            metadata = doc['metadata']
+            if metadata.get('type') == 'product':
+                products.append(metadata.get('product'))
+                revenues.append(metadata.get('revenue', 0))
+            elif metadata.get('type') == 'category':
+                categories.append(metadata.get('category'))
+        
+        # Handle document-specific queries for PDFs
+        if pdf_docs and any(word in query_lower for word in ['document', 'policy', 'procedure', 'manual', 'guide']):
+            pdf_content = []
+            sources_info = []
+            
+            for doc in pdf_docs[:3]:  # Limit to top 3 PDF results
+                content_snippet = doc['content'][:300] + "..." if len(doc['content']) > 300 else doc['content']
+                pdf_content.append(content_snippet)
+                
+                source_file = doc.get('source_file', 'Unknown document')
+                page_num = doc.get('page_number')
+                if page_num:
+                    sources_info.append(f"📄 {source_file} (Page {page_num})")
+                else:
+                    sources_info.append(f"📄 {source_file}")
+            
+            sources_text = "\n".join(sources_info)
+            content_text = "\n\n".join(pdf_content)
+            
+            return f"📚 **{company_name} Document Search**:\n\n{content_text}\n\n**Sources:**\n{sources_text}"
+        
+        # Generate response based on query intent (existing logic enhanced)
+        if any(word in query_lower for word in ['product', 'catalog', 'items']):
+            response_parts = []
+            
+            if products:
+                product_list = '\n'.join([f"• {p}" for p in products[:5]])
+                response_parts.append(f"📦 **Products from CSV Data**:\n{product_list}")
+            
+            if pdf_docs:
+                pdf_sources = [f"• {doc.get('source_file', 'Document')}" for doc in pdf_docs[:3]]
+                response_parts.append(f"📄 **Related Documents**:\n" + '\n'.join(pdf_sources))
+            
+            return f"**{company_name} Product Information**:\n\n" + "\n\n".join(response_parts)
+        
+        elif any(word in query_lower for word in ['revenue', 'sales', 'money']):
+            if revenues:
+                total_revenue = sum(revenues)
+                top_products = [(products[i], revenues[i]) for i in range(len(products))]
+                top_products.sort(key=lambda x: x[1], reverse=True)
+                
+                top_list = '\n'.join([f"• {p}: ₹{r:,.0f}" for p, r in top_products[:3]])
+                response = f"💰 **{company_name} Revenue Analysis**:\n\nTotal Revenue: ₹{total_revenue:,.0f}\n\nTop Performers:\n{top_list}"
+                
+                # Add document sources if available
+                if pdf_docs:
+                    doc_sources = [f"• {doc.get('source_file', 'Document')}" for doc in pdf_docs[:2]]
+                    response += f"\n\n📄 **Supporting Documents**:\n" + '\n'.join(doc_sources)
+                
+                return response
+        
+        elif any(word in query_lower for word in ['forecast', 'predict', 'future']):
+            response_parts = []
+            
+            if categories:
+                cat_list = ', '.join(categories[:3])
+                response_parts.append(f"📈 I can generate forecasts for: {cat_list}")
+            
+            if pdf_docs:
+                response_parts.append("📄 I also found relevant planning documents that might inform the forecast.")
+            
+            response = f"**{company_name} Forecast**:\n\n" + "\n\n".join(response_parts)
+            response += "\n\nWhich specific area would you like me to focus on?"
+            return response
+        
+        # General response combining all available data types
+        data_summary = []
+        if products:
+            data_summary.append(f"{len(products)} products")
+        if pdf_docs:
+            unique_pdfs = len(set(doc.get('source_file') for doc in pdf_docs))
+            data_summary.append(f"{unique_pdfs} documents")
+        
+        if data_summary:
+            summary_text = " and ".join(data_summary)
+            return f"🤖 **{company_name} AI Assistant**:\n\nI found information from {summary_text} that might help answer your question. Could you be more specific about what you'd like to know?"
+        
+        return f"🤖 **{company_name} AI Assistant**:\n\nI have access to your company data. What specific information are you looking for?"
+    
     def update_user_data(self, user_id: str, new_data_path: str):
         """Update user data with new uploaded file"""
         company_name = self.user_metadata.get(user_id, {}).get("company_name", "Unknown")
@@ -381,6 +535,223 @@ class RealVectorRAG:
         except Exception as e:
             print(f"Error updating data for {company_name}: {e}")
             return False
+    
+    def initialize_company_rag(self, user_id: str, company_name: str):
+        """Initialize RAG system for a company (alias for load_company_data with empty setup)"""
+        try:
+            # Create user metadata entry
+            self.user_metadata[user_id] = {"company_name": company_name}
+            
+            # Initialize empty structures
+            self.user_indices[user_id] = None
+            self.user_documents[user_id] = []
+            
+            # Update session info
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO user_sessions 
+                (user_id, company_name, total_documents, last_updated, index_version)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, company_name, 0, datetime.now(), "1.0"))
+            conn.commit()
+            conn.close()
+            
+            print(f"Initialized empty RAG system for {company_name}")
+            return True
+            
+        except Exception as e:
+            print(f"Error initializing RAG for {company_name}: {e}")
+            return False
+    
+    def add_pdf_document(self, user_id: str, company_name: str, pdf_path: str) -> bool:
+        """
+        Process and add PDF document to user's knowledge base
+        
+        Args:
+            user_id: User identifier
+            company_name: Company name for context
+            pdf_path: Path to PDF file
+            
+        Returns:
+            Boolean indicating success
+        """
+        try:
+            # Extract text from PDF
+            extraction_result = self.pdf_processor.extract_text(pdf_path, user_id, company_name)
+            
+            # Store document metadata
+            self._store_document_metadata(extraction_result)
+            
+            if not extraction_result.success:
+                logger.error(f"PDF extraction failed for {pdf_path}: {extraction_result.error}")
+                return False
+            
+            # Process extracted text into RAG documents
+            rag_documents = self.pdf_processor.process_for_rag(extraction_result)
+            
+            # Add documents to vector database
+            for doc in rag_documents:
+                self._add_document(
+                    user_id=user_id,
+                    company_name=company_name,
+                    doc_id=doc['doc_id'],
+                    content=doc['content'],
+                    metadata=doc['metadata'],
+                    document_type='pdf',
+                    source_file=extraction_result.metadata.filename,
+                    page_number=doc['metadata'].get('page_number')
+                )
+            
+            # Rebuild user index to include new PDF content
+            self._build_user_index(user_id, company_name)
+            
+            logger.info(f"Successfully added PDF {extraction_result.metadata.filename} to {company_name} knowledge base")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error adding PDF document {pdf_path}: {str(e)}")
+            return False
+    
+    def _store_document_metadata(self, extraction_result: PDFExtractionResult):
+        """Store PDF document metadata in tracking table"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            metadata = extraction_result.metadata
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO user_documents 
+                (document_id, user_id, filename, file_type, file_path, processing_status, 
+                 file_size, page_count, file_hash, metadata, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                f"pdf_{metadata.file_hash}",
+                metadata.user_id,
+                metadata.filename,
+                'pdf',
+                f"data/users/{metadata.user_id}/pdf/{metadata.filename}",
+                metadata.extraction_status,
+                metadata.file_size,
+                metadata.page_count,
+                metadata.file_hash,
+                json.dumps({
+                    'upload_date': metadata.upload_date.isoformat(),
+                    'company_id': metadata.company_id
+                }),
+                metadata.error_message
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            logger.error(f"Error storing document metadata: {str(e)}")
+    
+    def get_document_sources(self, user_id: str, doc_ids: List[str]) -> List[DocumentSource]:
+        """
+        Get source attribution for documents
+        
+        Args:
+            user_id: User identifier
+            doc_ids: List of document IDs
+            
+        Returns:
+            List of DocumentSource objects with attribution info
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Get document information
+            placeholders = ','.join(['?' for _ in doc_ids])
+            cursor.execute(f'''
+                SELECT doc_id, document_type, source_file, page_number, metadata
+                FROM user_vectors 
+                WHERE user_id = ? AND doc_id IN ({placeholders})
+            ''', [user_id] + doc_ids)
+            
+            results = cursor.fetchall()
+            conn.close()
+            
+            sources = []
+            for doc_id, doc_type, source_file, page_number, metadata_json in results:
+                metadata = json.loads(metadata_json) if metadata_json else {}
+                
+                source = DocumentSource(
+                    type=doc_type or 'csv',
+                    filename=source_file or metadata.get('filename', 'Unknown'),
+                    page_number=page_number,
+                    relevance_score=0.0,  # Will be set by query method
+                    doc_id=doc_id
+                )
+                sources.append(source)
+            
+            return sources
+            
+        except Exception as e:
+            logger.error(f"Error getting document sources: {str(e)}")
+            return []
+    
+    def query_user_knowledge_enhanced(self, user_id: str, query: str, top_k: int = 5) -> List[Dict]:
+        """
+        Enhanced query method that includes source attribution for PDF and CSV content
+        
+        Args:
+            user_id: User identifier
+            query: Search query
+            top_k: Number of results to return
+            
+        Returns:
+            List of results with enhanced source attribution
+        """
+        if user_id not in self.user_indices:
+            return []
+        
+        # Encode query
+        query_embedding = self.model.encode([query])[0].astype('float32')
+        query_embedding = query_embedding.reshape(1, -1)
+        faiss.normalize_L2(query_embedding)
+        
+        # Search
+        index = self.user_indices[user_id]
+        scores, indices = index.search(query_embedding, min(top_k, index.ntotal))
+        
+        results = []
+        documents = self.user_documents[user_id]
+        
+        for score, idx in zip(scores[0], indices[0]):
+            if idx < len(documents) and score > 0.3:  # Similarity threshold
+                doc = documents[idx]
+                
+                # Create enhanced result with source attribution
+                result = {
+                    'content': doc['content'],
+                    'metadata': doc['metadata'],
+                    'score': float(score),
+                    'doc_id': doc['doc_id'],
+                    'document_type': doc.get('document_type', 'csv'),
+                    'source_file': doc.get('source_file'),
+                    'page_number': doc.get('page_number'),
+                    'source_attribution': self._create_source_attribution(doc, score)
+                }
+                results.append(result)
+        
+        return results
+    
+    def _create_source_attribution(self, doc: Dict, score: float) -> str:
+        """Create human-readable source attribution"""
+        doc_type = doc.get('document_type', 'csv')
+        source_file = doc.get('source_file', 'Unknown file')
+        page_number = doc.get('page_number')
+        
+        if doc_type == 'pdf' and page_number:
+            return f"Source: {source_file}, Page {page_number} (relevance: {score:.2f})"
+        elif doc_type == 'pdf':
+            return f"Source: {source_file} (PDF document, relevance: {score:.2f})"
+        else:
+            return f"Source: {source_file} (CSV data, relevance: {score:.2f})"
 
 # Global instance
 real_vector_rag = RealVectorRAG()

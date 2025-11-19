@@ -69,16 +69,18 @@ const TabContainer = styled.div`
   border-bottom: 1px solid rgba(0, 255, 255, 0.3);
 `;
 
-const Tab = styled.button<{ active: boolean }>`
-  background: ${props => props.active ? 'rgba(0, 255, 255, 0.2)' : 'transparent'};
+const Tab = styled.button.withConfig({
+  shouldForwardProp: (prop) => !['$active'].includes(prop)
+})<{ $active: boolean }>`
+  background: ${props => props.$active ? 'rgba(0, 255, 255, 0.2)' : 'transparent'};
   border: none;
-  color: ${props => props.active ? '#00ffff' : '#ffffff'};
+  color: ${props => props.$active ? '#00ffff' : '#ffffff'};
   font-family: 'Orbitron', monospace;
   font-size: 1rem;
   padding: 1rem 2rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  border-bottom: 2px solid ${props => props.active ? '#00ffff' : 'transparent'};
+  border-bottom: 2px solid ${props => props.$active ? '#00ffff' : 'transparent'};
 
   &:hover {
     background: rgba(0, 255, 255, 0.1);
@@ -206,10 +208,12 @@ const CheckboxLabel = styled.label`
   }
 `;
 
-const ActionButton = styled.button<{ variant?: 'primary' | 'secondary' | 'danger' }>`
+const ActionButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => !['$variant'].includes(prop)
+})<{ $variant?: 'primary' | 'secondary' | 'danger' }>`
   background: ${props => 
-    props.variant === 'danger' ? 'linear-gradient(45deg, #ff0000, #cc0000)' :
-    props.variant === 'secondary' ? 'linear-gradient(45deg, #ff00ff, #8000ff)' :
+    props.$variant === 'danger' ? 'linear-gradient(45deg, #ff0000, #cc0000)' :
+    props.$variant === 'secondary' ? 'linear-gradient(45deg, #ff00ff, #8000ff)' :
     'linear-gradient(45deg, #00ffff, #0080ff)'
   };
   border: none;
@@ -254,21 +258,23 @@ const ActionButton = styled.button<{ variant?: 'primary' | 'secondary' | 'danger
   }
 `;
 
-const StatusMessage = styled.div<{ type: 'success' | 'error' | 'info' }>`
+const StatusMessage = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$type'].includes(prop)
+})<{ $type: 'success' | 'error' | 'info' }>`
   background: ${props => 
-    props.type === 'success' ? 'rgba(0, 255, 0, 0.1)' :
-    props.type === 'error' ? 'rgba(255, 0, 0, 0.1)' :
+    props.$type === 'success' ? 'rgba(0, 255, 0, 0.1)' :
+    props.$type === 'error' ? 'rgba(255, 0, 0, 0.1)' :
     'rgba(0, 255, 255, 0.1)'
   };
   border: 1px solid ${props => 
-    props.type === 'success' ? '#00ff00' :
-    props.type === 'error' ? '#ff0000' :
+    props.$type === 'success' ? '#00ff00' :
+    props.$type === 'error' ? '#ff0000' :
     '#00ffff'
   };
   border-radius: 5px;
   color: ${props => 
-    props.type === 'success' ? '#00ff00' :
-    props.type === 'error' ? '#ff0000' :
+    props.$type === 'success' ? '#00ff00' :
+    props.$type === 'error' ? '#ff0000' :
     '#00ffff'
   };
   font-family: 'Roboto Mono', monospace;
@@ -344,11 +350,13 @@ const ScheduleTitle = styled.h4`
   margin: 0;
 `;
 
-const ScheduleStatus = styled.span<{ active: boolean }>`
-  background: ${props => props.active ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)'};
-  border: 1px solid ${props => props.active ? '#00ff00' : '#ff0000'};
+const ScheduleStatus = styled.span.withConfig({
+  shouldForwardProp: (prop) => !['$active'].includes(prop)
+})<{ $active: boolean }>`
+  background: ${props => props.$active ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)'};
+  border: 1px solid ${props => props.$active ? '#00ff00' : '#ff0000'};
   border-radius: 15px;
-  color: ${props => props.active ? '#00ff00' : '#ff0000'};
+  color: ${props => props.$active ? '#00ff00' : '#ff0000'};
   font-family: 'Roboto Mono', monospace;
   font-size: 0.8rem;
   padding: 0.25rem 0.75rem;
@@ -368,9 +376,11 @@ const TemplateGrid = styled.div`
   margin-top: 1rem;
 `;
 
-const TemplateCard = styled.div<{ selected: boolean }>`
-  background: ${props => props.selected ? 'rgba(0, 255, 255, 0.2)' : 'rgba(0, 255, 255, 0.05)'};
-  border: 2px solid ${props => props.selected ? '#00ffff' : 'rgba(0, 255, 255, 0.3)'};
+const TemplateCard = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$selected'].includes(prop)
+})<{ $selected: boolean }>`
+  background: ${props => props.$selected ? 'rgba(0, 255, 255, 0.2)' : 'rgba(0, 255, 255, 0.05)'};
+  border: 2px solid ${props => props.$selected ? '#00ffff' : 'rgba(0, 255, 255, 0.3)'};
   border-radius: 10px;
   padding: 1.5rem;
   cursor: pointer;
@@ -936,7 +946,7 @@ const ShareableReportsDashboard: React.FC<ShareableReportsDashboardProps> = ({ c
             onKeyPress={(e) => e.key === 'Enter' && addRecipient()}
             style={{ flex: 1 }}
           />
-          <ActionButton variant="secondary" onClick={addRecipient}>
+          <ActionButton $variant="secondary" onClick={addRecipient}>
             ADD
           </ActionButton>
         </div>
@@ -1015,11 +1025,11 @@ const ShareableReportsDashboard: React.FC<ShareableReportsDashboardProps> = ({ c
                     {schedule.config.schedule_type.charAt(0).toUpperCase() + schedule.config.schedule_type.slice(1)} Report
                   </ScheduleTitle>
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <ScheduleStatus active={schedule.active}>
+                    <ScheduleStatus $active={schedule.active}>
                       {schedule.active ? 'ACTIVE' : 'INACTIVE'}
                     </ScheduleStatus>
                     <ActionButton
-                      variant="danger"
+                      $variant="danger"
                       onClick={() => handleDeleteSchedule(schedule.schedule_id)}
                       style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
                     >
@@ -1054,7 +1064,7 @@ const ShareableReportsDashboard: React.FC<ShareableReportsDashboardProps> = ({ c
         {templates.map((template) => (
           <TemplateCard
             key={template.template_id}
-            selected={reportRequest.template_id === template.template_id}
+            $selected={reportRequest.template_id === template.template_id}
             onClick={() => handleTemplateSelect(template)}
           >
             <TemplateTitle>{template.template_name}</TemplateTitle>
@@ -1270,25 +1280,25 @@ const ShareableReportsDashboard: React.FC<ShareableReportsDashboardProps> = ({ c
       
       <TabContainer>
         <Tab 
-          active={activeTab === 'create'} 
+          $active={activeTab === 'create'} 
           onClick={() => setActiveTab('create')}
         >
           CREATE REPORT
         </Tab>
         <Tab 
-          active={activeTab === 'schedule'} 
+          $active={activeTab === 'schedule'} 
           onClick={() => setActiveTab('schedule')}
         >
           SCHEDULE REPORTS
         </Tab>
         <Tab 
-          active={activeTab === 'templates'} 
+          $active={activeTab === 'templates'} 
           onClick={() => setActiveTab('templates')}
         >
           TEMPLATES
         </Tab>
         <Tab 
-          active={activeTab === 'analytics'} 
+          $active={activeTab === 'analytics'} 
           onClick={() => setActiveTab('analytics')}
         >
           ANALYTICS
@@ -1301,7 +1311,7 @@ const ShareableReportsDashboard: React.FC<ShareableReportsDashboardProps> = ({ c
       {activeTab === 'analytics' && renderAnalyticsTab()}
 
       {statusMessage && (
-        <StatusMessage type={statusMessage.type}>
+        <StatusMessage $type={statusMessage.type}>
           {statusMessage.message}
         </StatusMessage>
       )}

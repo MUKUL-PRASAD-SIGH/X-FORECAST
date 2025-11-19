@@ -2,12 +2,12 @@ import React, { ReactNode } from 'react';
 import styled, { css } from 'styled-components';
 import { motion, MotionProps } from 'framer-motion';
 
-interface CyberpunkCardProps extends MotionProps {
+interface CyberpunkCardProps extends Omit<MotionProps, 'variant' | 'padding'> {
   children: ReactNode;
-  variant?: 'default' | 'glass' | 'neon' | 'hologram';
-  padding?: 'sm' | 'md' | 'lg';
-  glitch?: boolean;
-  hover?: boolean;
+  $variant?: 'default' | 'glass' | 'neon' | 'hologram';
+  $padding?: 'sm' | 'md' | 'lg';
+  $glitch?: boolean;
+  $hover?: boolean;
   className?: string;
 }
 
@@ -78,10 +78,10 @@ const StyledCard = styled(motion.div)<CyberpunkCardProps>`
   overflow: hidden;
   transition: all 0.3s ease;
   
-  ${props => cardVariants[props.variant || 'default']}
-  ${props => paddingVariants[props.padding || 'md']}
+  ${props => cardVariants[props.$variant || 'default']}
+  ${props => paddingVariants[props.$padding || 'md']}
   
-  ${props => props.hover && css`
+  ${props => props.$hover && css`
     cursor: pointer;
     
     &:hover {
@@ -90,7 +90,7 @@ const StyledCard = styled(motion.div)<CyberpunkCardProps>`
     }
   `}
   
-  ${props => props.glitch && css`
+  ${props => props.$glitch && css`
     &:hover {
       animation: glitch 0.3s ease-in-out infinite alternate;
     }
@@ -129,24 +129,24 @@ const CardContent = styled.div`
 
 export const CyberpunkCard: React.FC<CyberpunkCardProps> = ({
   children,
-  variant = 'default',
-  padding = 'md',
-  glitch = false,
-  hover = false,
+  $variant = 'default',
+  $padding = 'md',
+  $glitch = false,
+  $hover = false,
   className,
   ...props
 }) => {
   return (
     <StyledCard
-      variant={variant}
-      padding={padding}
-      glitch={glitch}
-      hover={hover}
+      $variant={$variant}
+      $padding={$padding}
+      $glitch={$glitch}
+      $hover={$hover}
       className={className}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      whileHover={hover ? { scale: 1.02 } : {}}
+      whileHover={$hover ? { scale: 1.02 } : {}}
       {...props}
     >
       <CardContent>

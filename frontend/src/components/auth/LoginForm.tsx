@@ -56,6 +56,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     company_name: '',
     business_type: 'retail',
     industry: 'retail'
@@ -63,10 +64,52 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const validateForm = () => {
+    if (!formData.email || !formData.password) {
+      setError('Email and password are required');
+      return false;
+    }
+
+    if (!isLogin) {
+      // Registration validation
+      if (!formData.company_name) {
+        setError('Company name is required');
+        return false;
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match');
+        return false;
+      }
+
+      if (formData.password.length < 8) {
+        setError('Password must be at least 8 characters long');
+        return false;
+      }
+
+      if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+        setError('Password must contain at least one uppercase letter, one lowercase letter, and one number');
+        return false;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        setError('Please enter a valid email address');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (!validateForm()) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
@@ -87,14 +130,27 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
       if (response.ok) {
         if (isLogin) {
-          localStorage.setItem('auth_token', data.token);
+          // Successful login - check RAG status
+          if (data.rag_status && data.rag_status.startsWith('initialized_with_sample_')) {
+            const businessType = data.rag_status.split('_').pop();
+            console.log(`✅ AI system ready with sample ${businessType} data`);
+          } else if (data.rag_status === 'initialized_empty') {
+            console.log('ℹ️ AI system ready. Upload your data to activate personalized features.');
+          }
+          
           onLogin(data.token, data.user);
         } else {
+          // Successful registration - check if RAG was automatically initialized
+          if (data.rag_initialized) {
+            setError(`✅ Registration successful! AI system initialized with sample ${data.business_type} data. Please login.`);
+          } else {
+            setError(`✅ Registration successful! ${data.rag_message || 'Upload your data to activate AI features.'} Please login.`);
+          }
+          
           setIsLogin(true);
-          setError('✅ Registration successful! Please login.');
         }
       } else {
-        setError(data.detail || 'Authentication failed');
+        setError(data.message || data.detail || 'Authentication failed');
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -133,6 +189,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           
           {!isLogin && (
             <>
+              <CyberpunkInput
+                type="password"
+                placeholder="Confirm Password"
+                value={formData.confirmPassword}
+                onChange={(value) => setFormData({...formData, confirmPassword: value})}
+              />
+              
               <CyberpunkInput
                 placeholder="Company Name"
                 value={formData.company_name}

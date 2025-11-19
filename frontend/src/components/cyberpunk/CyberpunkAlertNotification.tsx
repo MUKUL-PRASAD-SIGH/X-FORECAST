@@ -86,14 +86,16 @@ const infoPulse = keyframes`
 `;
 
 // Styled components
-const AlertContainer = styled(motion.div)<{ 
-  severity: 'critical' | 'warning' | 'info';
-  glitchActive: boolean;
+const AlertContainer = styled(motion.div).withConfig({
+  shouldForwardProp: (prop) => !['$severity', '$glitchActive'].includes(prop)
+})<{ 
+  $severity: 'critical' | 'warning' | 'info';
+  $glitchActive: boolean;
 }>`
   position: relative;
   background: rgba(0, 0, 0, 0.9);
   border: 2px solid ${props => {
-    switch (props.severity) {
+    switch (props.$severity) {
       case 'critical': return props.theme.colors.error;
       case 'warning': return props.theme.colors.cyberYellow;
       case 'info': return props.theme.colors.neonBlue;
@@ -106,19 +108,19 @@ const AlertContainer = styled(motion.div)<{
   overflow: hidden;
   backdrop-filter: blur(10px);
   
-  ${props => props.severity === 'critical' && css`
+  ${props => props.$severity === 'critical' && css`
     animation: ${alertPulse} 2s infinite;
   `}
   
-  ${props => props.severity === 'warning' && css`
+  ${props => props.$severity === 'warning' && css`
     animation: ${warningPulse} 3s infinite;
   `}
   
-  ${props => props.severity === 'info' && css`
+  ${props => props.$severity === 'info' && css`
     animation: ${infoPulse} 4s infinite;
   `}
   
-  ${props => props.glitchActive && css`
+  ${props => props.$glitchActive && css`
     animation: ${glitchAnimation} 0.5s infinite;
   `}
   
@@ -148,7 +150,9 @@ const AlertContainer = styled(motion.div)<{
   }
 `;
 
-const ScanLineEffect = styled.div<{ severity: 'critical' | 'warning' | 'info' }>`
+const ScanLineEffect = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$severity'].includes(prop)
+})<{ $severity: 'critical' | 'warning' | 'info' }>`
   position: absolute;
   top: 0;
   left: -100%;
@@ -157,7 +161,7 @@ const ScanLineEffect = styled.div<{ severity: 'critical' | 'warning' | 'info' }>
   background: linear-gradient(90deg, 
     transparent 0%, 
     ${props => {
-      switch (props.severity) {
+      switch (props.$severity) {
         case 'critical': return props.theme.colors.error;
         case 'warning': return props.theme.colors.cyberYellow;
         case 'info': return props.theme.colors.neonBlue;
@@ -179,7 +183,9 @@ const AlertHeader = styled.div`
   z-index: 3;
 `;
 
-const AlertIcon = styled.div<{ severity: 'critical' | 'warning' | 'info' }>`
+const AlertIcon = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['$severity'].includes(prop)
+})<{ $severity: 'critical' | 'warning' | 'info' }>`
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -189,7 +195,7 @@ const AlertIcon = styled.div<{ severity: 'critical' | 'warning' | 'info' }>`
   font-size: 1.5rem;
   font-weight: bold;
   background: ${props => {
-    switch (props.severity) {
+    switch (props.$severity) {
       case 'critical': return props.theme.colors.error;
       case 'warning': return props.theme.colors.cyberYellow;
       case 'info': return props.theme.colors.neonBlue;
@@ -198,7 +204,7 @@ const AlertIcon = styled.div<{ severity: 'critical' | 'warning' | 'info' }>`
   }};
   color: ${props => props.theme.colors.darkBg};
   box-shadow: 0 0 20px ${props => {
-    switch (props.severity) {
+    switch (props.$severity) {
       case 'critical': return 'rgba(255, 0, 64, 0.6)';
       case 'warning': return 'rgba(255, 255, 0, 0.6)';
       case 'info': return 'rgba(0, 255, 255, 0.6)';
@@ -215,12 +221,14 @@ const AlertContent = styled.div`
   z-index: 3;
 `;
 
-const AlertTitle = styled.h4<{ severity: 'critical' | 'warning' | 'info' }>`
+const AlertTitle = styled.h4.withConfig({
+  shouldForwardProp: (prop) => !['$severity'].includes(prop)
+})<{ $severity: 'critical' | 'warning' | 'info' }>`
   font-family: ${props => props.theme.typography.fontFamily.display};
   font-size: ${props => props.theme.typography.fontSize.lg};
   font-weight: ${props => props.theme.typography.fontWeight.bold};
   color: ${props => {
-    switch (props.severity) {
+    switch (props.$severity) {
       case 'critical': return props.theme.colors.error;
       case 'warning': return props.theme.colors.cyberYellow;
       case 'info': return props.theme.colors.neonBlue;
@@ -271,15 +279,17 @@ const AlertTimestamp = styled.div`
   opacity: 0.7;
 `;
 
-const GlitchToggle = styled.button<{ active: boolean }>`
+const GlitchToggle = styled.button.withConfig({
+  shouldForwardProp: (prop) => !['$active'].includes(prop)
+})<{ $active: boolean }>`
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
   width: 30px;
   height: 30px;
   border: none;
-  background: ${props => props.active ? props.theme.colors.error : 'transparent'};
-  color: ${props => props.active ? props.theme.colors.darkBg : props.theme.colors.secondaryText};
+  background: ${props => props.$active ? props.theme.colors.error : 'transparent'};
+  color: ${props => props.$active ? props.theme.colors.darkBg : props.theme.colors.secondaryText};
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -372,8 +382,8 @@ export const CyberpunkAlertNotification: React.FC<AlertNotificationProps> = ({
   return (
     <AnimatePresence>
       <AlertContainer
-        severity={severity}
-        glitchActive={glitchActive}
+        $severity={severity}
+        $glitchActive={glitchActive}
         initial={{ opacity: 0, x: 300, scale: 0.8 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
         exit={{ opacity: 0, x: 300, scale: 0.8 }}
@@ -385,10 +395,10 @@ export const CyberpunkAlertNotification: React.FC<AlertNotificationProps> = ({
         }}
         whileHover={{ scale: 1.02 }}
       >
-        <ScanLineEffect severity={severity} />
+        <ScanLineEffect $severity={severity} />
         
         <GlitchToggle
-          active={glitchActive}
+          $active={glitchActive}
           onClick={() => setGlitchActive(!glitchActive)}
           title="Toggle glitch effect"
         >
@@ -397,11 +407,11 @@ export const CyberpunkAlertNotification: React.FC<AlertNotificationProps> = ({
 
         <AlertHeader>
           <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-            <AlertIcon severity={severity}>
+            <AlertIcon $severity={severity}>
               {getAlertIcon()}
             </AlertIcon>
             <AlertContent>
-              <AlertTitle severity={severity}>
+              <AlertTitle $severity={severity}>
                 {title}
               </AlertTitle>
               <AlertMessage>

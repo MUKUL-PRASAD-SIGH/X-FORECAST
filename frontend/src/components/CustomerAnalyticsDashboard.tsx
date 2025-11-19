@@ -736,7 +736,7 @@ export const CustomerAnalyticsDashboard: React.FC<CustomerAnalyticsDashboardProp
             <VisualizationGrid>
               <ChartSection>
                 <SectionTitle>Segment Performance Comparison</SectionTitle>
-                <CyberpunkCard variant="glass">
+                <CyberpunkCard $variant="glass">
                   <CustomerSegmentChart 
                     segments={analyticsData.customer_segments}
                     width={600}
@@ -798,7 +798,7 @@ export const CustomerAnalyticsDashboard: React.FC<CustomerAnalyticsDashboardProp
           >
             <ChartSection>
               <SectionTitle>Retention Rate Analysis</SectionTitle>
-              <CyberpunkCard variant="glass">
+              <CyberpunkCard $variant="glass">
                 <RetentionRateChart 
                   cohortData={analyticsData.cohort_summary.map(cohort => ({
                     ...cohort,
@@ -826,7 +826,7 @@ export const CustomerAnalyticsDashboard: React.FC<CustomerAnalyticsDashboardProp
               <SectionTitle>Cohort Summary</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
                 {analyticsData.cohort_summary.map((cohort, index) => (
-                  <CyberpunkCard key={index} variant="glass">
+                  <CyberpunkCard key={index} $variant="glass">
                     <h4 style={{ color: '#00ffff', margin: '0 0 1rem 0' }}>{cohort.cohort_month}</h4>
                     <SegmentMetrics>
                       <SegmentMetric>

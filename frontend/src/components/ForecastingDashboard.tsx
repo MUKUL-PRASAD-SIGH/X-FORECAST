@@ -823,7 +823,7 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
           </ModelWeightsCard>
 
           {/* Forecast Summary */}
-          <CyberpunkCard variant="neon" padding="lg">
+          <CyberpunkCard $variant="neon" $padding="lg">
             <CardTitle>📊 Forecast Summary</CardTitle>
             
             {forecastData && (

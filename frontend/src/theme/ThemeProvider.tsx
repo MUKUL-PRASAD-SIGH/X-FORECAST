@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { ThemeProvider as StyledThemeProvider } from 'styled-components';
 import { cyberpunkTheme, CyberpunkTheme } from './cyberpunkTheme';
+import { PropFilterWrapper } from './StyleSheetManager';
 
 // Theme context
 const ThemeContext = createContext<CyberpunkTheme>(cyberpunkTheme);
@@ -25,11 +26,13 @@ export const CyberpunkThemeProvider: React.FC<CyberpunkThemeProviderProps> = ({
   theme = cyberpunkTheme,
 }) => {
   return (
-    <ThemeContext.Provider value={theme}>
-      <StyledThemeProvider theme={theme}>
-        {children}
-      </StyledThemeProvider>
-    </ThemeContext.Provider>
+    <PropFilterWrapper>
+      <ThemeContext.Provider value={theme}>
+        <StyledThemeProvider theme={theme}>
+          {children}
+        </StyledThemeProvider>
+      </ThemeContext.Provider>
+    </PropFilterWrapper>
   );
 };
 

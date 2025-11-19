@@ -50,39 +50,47 @@ const variantStyles = {
   `,
 };
 
-const NavigationContainer = styled(motion.nav)<{
-  orientation: 'horizontal' | 'vertical';
-  variant: 'primary' | 'minimal' | 'floating';
+const NavigationContainer = styled(motion.nav).withConfig({
+  shouldForwardProp: (prop) => !['$orientation', '$variant'].includes(prop)
+})<{
+  $orientation: 'horizontal' | 'vertical';
+  $variant: 'primary' | 'minimal' | 'floating';
 }>`
   display: flex;
   position: relative;
   padding: ${props => props.theme.spacing.sm};
   
-  ${props => orientationStyles[props.orientation]}
-  ${props => variantStyles[props.variant]}
+  ${props => orientationStyles[props.$orientation]}
+  ${props => variantStyles[props.$variant]}
 `;
 
-const NavigationList = styled.ul<{ orientation: 'horizontal' | 'vertical' }>`
+const NavigationList = styled.ul.withConfig({
+  shouldForwardProp: (prop) => !['$orientation'].includes(prop)
+})<{ $orientation: 'horizontal' | 'vertical' }>`
   display: flex;
   list-style: none;
   margin: 0;
   padding: 0;
   gap: ${props => props.theme.spacing.xs};
   
-  ${props => orientationStyles[props.orientation]}
+  ${props => orientationStyles[props.$orientation]}
 `;
 
-const NavigationItem = styled(motion.li)<{ active?: boolean; orientation: 'horizontal' | 'vertical' }>`
+const NavigationItem = styled(motion.li).withConfig({
+  shouldForwardProp: (prop) => !['$active', '$orientation'].includes(prop)
+})<{ $active?: boolean; $orientation: 'horizontal' | 'vertical' }>`
   position: relative;
   
-  ${props => props.orientation === 'horizontal' ? css`
+  ${props => props.$orientation === 'horizontal' ? css`
     flex: 1;
   ` : css`
     width: 100%;
   `}
 `;
 
-const NavigationLink = styled(motion.button)<{ active?: boolean }>`
+const NavigationLink = styled(motion.button).withConfig({
+  shouldForwardProp: (prop) => !['$active'].includes(prop)
+})<{ $active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,7 +100,7 @@ const NavigationLink = styled(motion.button)<{ active?: boolean }>`
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: ${props => props.active ? props.theme.colors.neonBlue : props.theme.colors.secondaryText};
+  color: ${props => props.$active ? props.theme.colors.neonBlue : props.theme.colors.secondaryText};
   font-family: ${props => props.theme.typography.fontFamily.primary};
   font-size: ${props => props.theme.typography.fontSize.sm};
   font-weight: ${props => props.theme.typography.fontWeight.medium};
@@ -109,7 +117,7 @@ const NavigationLink = styled(motion.button)<{ active?: boolean }>`
     box-shadow: ${props => props.theme.effects.softGlow};
   }
   
-  ${props => props.active && css`
+  ${props => props.$active && css`
     background: rgba(0, 255, 255, 0.1);
     border-color: ${props.theme.colors.neonBlue};
     box-shadow: ${props.theme.effects.softGlow};
@@ -162,12 +170,14 @@ const Badge = styled(motion.span)`
   box-shadow: 0 0 10px ${props => props.theme.colors.hotPink};
 `;
 
-const ActiveIndicator = styled(motion.div)<{ orientation: 'horizontal' | 'vertical' }>`
+const ActiveIndicator = styled(motion.div).withConfig({
+  shouldForwardProp: (prop) => !['$orientation'].includes(prop)
+})<{ $orientation: 'horizontal' | 'vertical' }>`
   position: absolute;
   background: ${props => props.theme.colors.neonBlue};
   box-shadow: ${props => props.theme.effects.neonGlow};
   
-  ${props => props.orientation === 'horizontal' ? css`
+  ${props => props.$orientation === 'horizontal' ? css`
     bottom: -1px;
     left: 0;
     right: 0;
@@ -199,25 +209,25 @@ export const CyberpunkNavigation: React.FC<CyberpunkNavigationProps> = ({
 
   return (
     <NavigationContainer
-      orientation={orientation}
-      variant={variant}
+      $orientation={orientation}
+      $variant={variant}
       className={className}
       initial={{ opacity: 0, y: orientation === 'horizontal' ? -20 : 0, x: orientation === 'vertical' ? -20 : 0 }}
       animate={{ opacity: 1, y: 0, x: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <NavigationList orientation={orientation}>
+      <NavigationList $orientation={orientation}>
         {items.map((item, index) => (
           <NavigationItem
             key={item.id}
-            active={activeItem === item.id}
-            orientation={orientation}
+            $active={activeItem === item.id}
+            $orientation={orientation}
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <NavigationLink
-              active={activeItem === item.id}
+              $active={activeItem === item.id}
               onClick={() => handleItemClick(item)}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -243,7 +253,7 @@ export const CyberpunkNavigation: React.FC<CyberpunkNavigationProps> = ({
             <AnimatePresence>
               {activeItem === item.id && (
                 <ActiveIndicator
-                  orientation={orientation}
+                  $orientation={orientation}
                   layoutId="activeIndicator"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
