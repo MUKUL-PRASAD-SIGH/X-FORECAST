@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { CyberpunkCard, CyberpunkButton } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
 
 interface ScenarioParameters {
   seasonality_factor: number;
@@ -30,7 +32,6 @@ interface ScenarioResult {
 }
 
 interface ScenarioPlanningProps {
-  authToken: string;
   baselineData?: any;
   onScenarioUpdate?: (scenarios: ScenarioResult[]) => void;
 }
@@ -207,10 +208,11 @@ const CardTitle = styled.h3`
 `;
 
 export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({ 
-  authToken, 
   baselineData,
   onScenarioUpdate 
 }) => {
+  const { authToken, isAuthenticated } = useAuth();
+  const { post } = useApiClient();
   const [activeScenario, setActiveScenario] = useState<string>('scenario_1');
   const [scenarios, setScenarios] = useState<Record<string, ScenarioParameters>>({
     scenario_1: {
@@ -240,6 +242,17 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
   const [loading, setLoading] = useState(false);
   const [realTimeUpdates, setRealTimeUpdates] = useState(true);
 
+  // Handle missing authentication
+  if (!isAuthenticated) {
+    return (
+      <ScenarioContainer $variant="glass" $padding="lg">
+        <div style={{ textAlign: 'center', color: '#ff0040' }}>
+          Authentication required to access scenario planning
+        </div>
+      </ScenarioContainer>
+    );
+  }
+
   // Update scenario parameters
   const updateParameter = (parameter: keyof ScenarioParameters, value: any) => {
     setScenarios(prev => ({
@@ -261,33 +274,31 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
 
   // Generate forecast for specific scenario
   const generateScenarioForecast = async (scenarioName: string, parameters: ScenarioParameters) => {
+    if (!isAuthenticated || !authToken) {
+      console.error('Authentication required for scenario forecast generation');
+      return;
+    }
+
     try {
-      const response = await fetch('/api/company-sales/scenario-forecast', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          scenario_name: scenarioName,
-          parameters: parameters,
-          horizon_months: 6
-        }),
+      const response = await post('/api/company-sales/scenario-forecast', {
+        scenario_name: scenarioName,
+        parameters: parameters,
+        horizon_months: 6
       });
 
-      if (response.ok) {
-        const result = await response.json();
+      if (response.success && response.data) {
+        const result = response.data;
         
         // Update scenario results
         setScenarioResults(prev => {
           const updated = prev.filter(s => s.scenario_name !== scenarioName);
-          return [...updated, result];
+          return [...updated, result as ScenarioResult];
         });
         
         // Notify parent component
         if (onScenarioUpdate) {
           const updatedResults = scenarioResults.filter(s => s.scenario_name !== scenarioName);
-          onScenarioUpdate([...updatedResults, result]);
+          onScenarioUpdate([...updatedResults, result as ScenarioResult]);
         }
       } else {
         console.warn('Scenario forecast failed, using mock data');
@@ -399,7 +410,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
   const currentScenarioResult = scenarioResults.find(s => s.scenario_name === activeScenario);
 
   return (
-    <ScenarioContainer variant="hologram" padding="lg">
+    <ScenarioContainer $variant="hologram" $padding="lg">
       <CardTitle>🎯 Scenario Planning & Parameter Adjustment</CardTitle>
       
       {/* Scenario Tabs */}
@@ -419,7 +430,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
 
       {/* Parameter Controls */}
       <ParameterGrid>
-        <ParameterCard variant="glass">
+        <ParameterCard $variant="glass">
           <ParameterLabel>Seasonality Factor</ParameterLabel>
           <ParameterSlider
             type="range"
@@ -434,7 +445,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
           </ParameterValue>
         </ParameterCard>
 
-        <ParameterCard variant="glass">
+        <ParameterCard $variant="glass">
           <ParameterLabel>Trend Adjustment</ParameterLabel>
           <ParameterSlider
             type="range"
@@ -449,7 +460,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
           </ParameterValue>
         </ParameterCard>
 
-        <ParameterCard variant="glass">
+        <ParameterCard $variant="glass">
           <ParameterLabel>Volatility Modifier</ParameterLabel>
           <ParameterSlider
             type="range"
@@ -464,7 +475,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
           </ParameterValue>
         </ParameterCard>
 
-        <ParameterCard variant="glass">
+        <ParameterCard $variant="glass">
           <ParameterLabel>External Factors</ParameterLabel>
           <ParameterSlider
             type="range"
@@ -479,7 +490,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
           </ParameterValue>
         </ParameterCard>
 
-        <ParameterCard variant="glass">
+        <ParameterCard $variant="glass">
           <ParameterLabel>Market Conditions</ParameterLabel>
           <MarketConditionSelect
             value={scenarios[activeScenario].market_conditions}
@@ -491,7 +502,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
           </MarketConditionSelect>
         </ParameterCard>
 
-        <ParameterCard variant="glass">
+        <ParameterCard $variant="glass">
           <ParameterLabel>Real-time Updates</ParameterLabel>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#00ffff', marginTop: '1rem' }}>
             <input
@@ -537,7 +548,7 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
       {/* Action Buttons */}
       <ActionButtons>
         <CyberpunkButton
-          variant="primary"
+          $variant="primary"
           onClick={generateAllScenarios}
           disabled={loading}
         >
@@ -545,14 +556,14 @@ export const ScenarioPlanning: React.FC<ScenarioPlanningProps> = ({
         </CyberpunkButton>
         
         <CyberpunkButton
-          variant="secondary"
+          $variant="secondary"
           onClick={resetToBaseline}
         >
           Reset to Baseline
         </CyberpunkButton>
         
         <CyberpunkButton
-          variant="secondary"
+          $variant="secondary"
           onClick={() => generateScenarioForecast(activeScenario, scenarios[activeScenario])}
         >
           Update Current Scenario

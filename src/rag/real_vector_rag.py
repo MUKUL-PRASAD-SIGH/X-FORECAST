@@ -14,8 +14,25 @@ import sqlite3
 import pickle
 from dataclasses import dataclass
 import logging
+import time
+
+# Import comprehensive logging system
+from src.utils.logging_config import comprehensive_logger
 
 logger = logging.getLogger(__name__)
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder for numpy types"""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        return super().default(obj)
 
 # Import dependencies with graceful degradation
 try:
@@ -284,7 +301,7 @@ class RealVectorRAG:
             INSERT OR REPLACE INTO user_vectors 
             (user_id, company_name, doc_id, content, metadata, embedding, document_type, source_file, page_number)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, company_name, doc_id, content, json.dumps(metadata), pickle.dumps(embedding), 
+        ''', (user_id, company_name, doc_id, content, json.dumps(metadata, cls=NumpyEncoder), pickle.dumps(embedding), 
               document_type, source_file, page_number))
         
         conn.commit()
@@ -364,75 +381,182 @@ class RealVectorRAG:
             del self.user_metadata[user_id]
     
     def query_user_knowledge(self, user_id: str, query: str, top_k: int = 5) -> List[Dict]:
-        """Query user's personalized knowledge base using vector similarity"""
-        if user_id not in self.user_indices:
+        """Query user's personalized knowledge base using vector similarity with caching"""
+        start_time = time.time()
+        company_name = self.user_metadata.get(user_id, {}).get("company_name", "Unknown Company")
+        
+        try:
+            # Check cache first
+            try:
+                from src.utils.performance_optimizer import rag_cache
+                cached_result = rag_cache.get_cached_response(user_id, query)
+                if cached_result:
+                    response_time_ms = (time.time() - start_time) * 1000
+                    comprehensive_logger.log_rag_query_success(
+                        user_id=user_id,
+                        company_name=company_name,
+                        query=query,
+                        response_time_ms=response_time_ms,
+                        relevance_score=0.9  # Cached results are considered high relevance
+                    )
+                    logger.debug(f"RAG cache hit for user {user_id[:8]}... ({response_time_ms:.2f}ms)")
+                    return cached_result
+            except ImportError:
+                logger.debug("RAG cache not available")
+            except Exception as e:
+                logger.warning(f"RAG cache error: {str(e)}")
+            
+            if user_id not in self.user_indices:
+                # Log query failure - no RAG initialized
+                comprehensive_logger.log_rag_query_failure(
+                    user_id=user_id,
+                    company_name=company_name,
+                    query=query,
+                    error_message="RAG system not initialized for user"
+                )
+                return []
+            
+            # Encode query
+            query_embedding = self.model.encode([query])[0].astype('float32')
+            query_embedding = query_embedding.reshape(1, -1)
+            faiss.normalize_L2(query_embedding)
+            
+            # Search
+            index = self.user_indices[user_id]
+            scores, indices = index.search(query_embedding, min(top_k, index.ntotal))
+            
+            results = []
+            documents = self.user_documents[user_id]
+            
+            for score, idx in zip(scores[0], indices[0]):
+                if idx < len(documents) and score > 0.3:  # Similarity threshold
+                    doc = documents[idx]
+                    results.append({
+                        'content': doc['content'],
+                        'metadata': doc['metadata'],
+                        'score': float(score),
+                        'doc_id': doc['doc_id']
+                    })
+            
+            # Log successful query
+            response_time_ms = (time.time() - start_time) * 1000
+            relevance_score = np.mean([r['score'] for r in results]) if results else 0.0
+            
+            comprehensive_logger.log_rag_query_success(
+                user_id=user_id,
+                company_name=company_name,
+                query=query,
+                response_time_ms=response_time_ms,
+                relevance_score=relevance_score
+            )
+            
+            # Cache results for future queries
+            try:
+                from src.utils.performance_optimizer import rag_cache
+                if results and relevance_score > 0.5:  # Only cache good results
+                    rag_cache.cache_response(user_id, query, results, response_time_ms, relevance_score)
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"Failed to cache RAG results: {str(e)}")
+            
+            return results
+            
+        except Exception as e:
+            # Log query failure
+            comprehensive_logger.log_rag_query_failure(
+                user_id=user_id,
+                company_name=company_name,
+                query=query,
+                error_message=str(e)
+            )
+            logger.error(f"Error querying RAG for user {user_id}: {str(e)}")
             return []
-        
-        # Encode query
-        query_embedding = self.model.encode([query])[0].astype('float32')
-        query_embedding = query_embedding.reshape(1, -1)
-        faiss.normalize_L2(query_embedding)
-        
-        # Search
-        index = self.user_indices[user_id]
-        scores, indices = index.search(query_embedding, min(top_k, index.ntotal))
-        
-        results = []
-        documents = self.user_documents[user_id]
-        
-        for score, idx in zip(scores[0], indices[0]):
-            if idx < len(documents) and score > 0.3:  # Similarity threshold
-                doc = documents[idx]
-                results.append({
-                    'content': doc['content'],
-                    'metadata': doc['metadata'],
-                    'score': float(score),
-                    'doc_id': doc['doc_id']
-                })
-        
-        return results
     
     def generate_personalized_response(self, user_id: str, query: str) -> RAGResponse:
         """Generate personalized response using enhanced vector RAG with PDF support"""
+        start_time = time.time()
+        
         # Get company context
         company_name = self.user_metadata.get(user_id, {}).get("company_name", "Unknown Company")
         
-        # Retrieve relevant documents using enhanced query
-        relevant_docs = self.query_user_knowledge_enhanced(user_id, query, top_k=5)
-        
-        if not relevant_docs:
+        try:
+            # Retrieve relevant documents using enhanced query
+            relevant_docs = self.query_user_knowledge_enhanced(user_id, query, top_k=5)
+            
+            if not relevant_docs:
+                response = RAGResponse(
+                    response_text=f"I don't have specific data for {company_name} yet. Please upload your company data (CSV files for analytics or PDF documents for knowledge) to get personalized insights.",
+                    confidence=0.3,
+                    sources=[],
+                    company_context=company_name
+                )
+                
+                # Log successful response (even if no data)
+                response_time_ms = (time.time() - start_time) * 1000
+                comprehensive_logger.log_rag_query_success(
+                    user_id=user_id,
+                    company_name=company_name,
+                    query=query,
+                    response_time_ms=response_time_ms,
+                    relevance_score=0.3
+                )
+                
+                return response
+            
+            # Generate response based on retrieved documents
+            response_text = self._generate_contextual_response_enhanced(query, relevant_docs, company_name)
+            
+            # Calculate confidence based on similarity scores
+            avg_score = np.mean([doc['score'] for doc in relevant_docs])
+            confidence = min(0.95, avg_score * 1.2)
+            
+            # Create DocumentSource objects for better attribution
+            sources = []
+            for doc in relevant_docs:
+                source = DocumentSource(
+                    type=doc.get('document_type', 'csv'),
+                    filename=doc.get('source_file', 'Unknown'),
+                    page_number=doc.get('page_number'),
+                    relevance_score=doc['score'],
+                    doc_id=doc['doc_id']
+                )
+                sources.append(source)
+            
+            # Log successful response generation
+            response_time_ms = (time.time() - start_time) * 1000
+            comprehensive_logger.log_rag_query_success(
+                user_id=user_id,
+                company_name=company_name,
+                query=query,
+                response_time_ms=response_time_ms,
+                relevance_score=avg_score
+            )
+            
             return RAGResponse(
-                response_text=f"I don't have specific data for {company_name} yet. Please upload your company data (CSV files for analytics or PDF documents for knowledge) to get personalized insights.",
-                confidence=0.3,
+                response_text=response_text,
+                confidence=confidence,
+                sources=sources,
+                company_context=company_name
+            )
+            
+        except Exception as e:
+            # Log response generation failure
+            comprehensive_logger.log_rag_query_failure(
+                user_id=user_id,
+                company_name=company_name,
+                query=query,
+                error_message=f"Response generation failed: {str(e)}"
+            )
+            
+            logger.error(f"Error generating RAG response for user {user_id}: {str(e)}")
+            
+            return RAGResponse(
+                response_text=f"I'm sorry, I encountered an error while processing your query. Please try again later.",
+                confidence=0.0,
                 sources=[],
                 company_context=company_name
             )
-        
-        # Generate response based on retrieved documents
-        response_text = self._generate_contextual_response_enhanced(query, relevant_docs, company_name)
-        
-        # Calculate confidence based on similarity scores
-        avg_score = np.mean([doc['score'] for doc in relevant_docs])
-        confidence = min(0.95, avg_score * 1.2)
-        
-        # Create DocumentSource objects for better attribution
-        sources = []
-        for doc in relevant_docs:
-            source = DocumentSource(
-                type=doc.get('document_type', 'csv'),
-                filename=doc.get('source_file', 'Unknown'),
-                page_number=doc.get('page_number'),
-                relevance_score=doc['score'],
-                doc_id=doc['doc_id']
-            )
-            sources.append(source)
-        
-        return RAGResponse(
-            response_text=response_text,
-            confidence=confidence,
-            sources=sources,
-            company_context=company_name
-        )
     
     def _generate_contextual_response(self, query: str, docs: List[Dict], company_name: str) -> str:
         """Generate contextual response from retrieved documents"""
@@ -708,7 +832,7 @@ class RealVectorRAG:
                 json.dumps({
                     'upload_date': metadata.upload_date.isoformat(),
                     'company_id': metadata.company_id
-                }),
+                }, cls=NumpyEncoder),
                 metadata.error_message
             ))
             

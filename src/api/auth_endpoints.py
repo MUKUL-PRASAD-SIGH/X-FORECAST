@@ -2,7 +2,7 @@
 Real Multi-Tenant Authentication Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -10,13 +10,41 @@ import json
 import re
 import secrets
 import smtplib
-from email.mime.text import MimeText
-from email.mime.multipart import MimeMultipart
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
 # Import authentication components
 from src.auth.user_management import user_manager
 from src.auth.multi_tenant_auth import Company, User
+
+# Import security configuration for rate limiting
+try:
+    from .security_config import auth_rate_limit, security_config, security_monitor
+    from slowapi.util import get_remote_address
+    SECURITY_CONFIG_AVAILABLE = True
+except ImportError:
+    # Fallback when security config not available
+    def auth_rate_limit():
+        def decorator(func):
+            return func
+        return decorator
+    
+    class FallbackSecurityConfig:
+        def log_security_event(self, *args, **kwargs): pass
+        def validate_file_upload(self, filename, size): return {"valid": True, "errors": []}
+    
+    class FallbackSecurityMonitor:
+        def record_failed_login(self, ip, user_id=None): pass
+        def is_ip_blocked(self, ip): return False
+    
+    security_config = FallbackSecurityConfig()
+    security_monitor = FallbackSecurityMonitor()
+    
+    def get_remote_address(request):
+        return getattr(request.client, 'host', 'unknown') if hasattr(request, 'client') else 'unknown'
+    
+    SECURITY_CONFIG_AVAILABLE = False
 
 router = APIRouter()
 
@@ -88,12 +116,12 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
             print("Email configuration not set. Skipping email send.")
             return False
         
-        msg = MimeMultipart()
+        msg = MIMEMultipart()
         msg['From'] = EMAIL_CONFIG["from_email"]
         msg['To'] = to_email
         msg['Subject'] = subject
         
-        msg.attach(MimeText(body, 'html'))
+        msg.attach(MIMEText(body, 'html'))
         
         server = smtplib.SMTP(EMAIL_CONFIG["smtp_server"], EMAIL_CONFIG["smtp_port"])
         server.starttls()
@@ -122,7 +150,8 @@ def get_current_user(authorization: Optional[str] = Header(None)):
     return user_data
 
 @router.post("/register")
-async def register_user(request: RegisterRequest):
+@auth_rate_limit()
+async def register_user(request: RegisterRequest, http_request: Request = None):
     """Register new business user with company-specific setup"""
     try:
         # Validate input
@@ -245,15 +274,49 @@ async def register_user(request: RegisterRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/login")
-async def login_user(request: LoginRequest):
+@auth_rate_limit()
+async def login_user(request: LoginRequest, http_request: Request = None):
     """Authenticate user and return JWT token"""
     try:
+        # Get client IP for security monitoring
+        client_ip = "unknown"
+        if http_request and SECURITY_CONFIG_AVAILABLE:
+            try:
+                client_ip = get_remote_address(http_request)
+                
+                # Check if IP is blocked
+                if security_monitor.is_ip_blocked(client_ip):
+                    security_config.log_security_event(
+                        "blocked_ip_login_attempt",
+                        ip_address=client_ip,
+                        details=f"Blocked IP attempted login for {request.email}"
+                    )
+                    raise HTTPException(status_code=429, detail="IP address temporarily blocked due to security violations")
+            except:
+                pass
+        
         result = user_manager.authenticate_user(request.email, request.password)
         
         if not result:
+            # Record failed login attempt
+            if SECURITY_CONFIG_AVAILABLE:
+                security_monitor.record_failed_login(client_ip, request.email)
+                security_config.log_security_event(
+                    "failed_login_attempt",
+                    ip_address=client_ip,
+                    details=f"Failed login attempt for {request.email}"
+                )
             raise HTTPException(status_code=401, detail="Invalid email or password")
         
         if "error" in result:
+            # Record failed login attempt
+            if SECURITY_CONFIG_AVAILABLE:
+                security_monitor.record_failed_login(client_ip, request.email)
+                security_config.log_security_event(
+                    "failed_login_attempt",
+                    ip_address=client_ip,
+                    details=f"Failed login attempt for {request.email}: {result['error']}"
+                )
             raise HTTPException(status_code=401, detail=result["error"])
         
         # Check if RAG system needs initialization
@@ -301,6 +364,15 @@ async def login_user(request: LoginRequest):
         
         # Add RAG status to response
         result["rag_status"] = rag_status
+        
+        # Log successful login
+        if SECURITY_CONFIG_AVAILABLE:
+            security_config.log_security_event(
+                "successful_login",
+                user_id=result["user"]["user_id"],
+                ip_address=client_ip,
+                details=f"Successful login for {request.email}"
+            )
         
         return result
         
@@ -438,7 +510,8 @@ async def verify_email(request: EmailVerificationRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/forgot-password")
-async def forgot_password(request: PasswordResetRequest):
+@auth_rate_limit()
+async def forgot_password(request: PasswordResetRequest, http_request: Request = None):
     """Request password reset"""
     try:
         result = user_manager.request_password_reset(request.email)
@@ -483,7 +556,8 @@ async def forgot_password(request: PasswordResetRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reset-password")
-async def reset_password(request: PasswordResetConfirmRequest):
+@auth_rate_limit()
+async def reset_password(request: PasswordResetConfirmRequest, http_request: Request = None):
     """Reset password with reset code"""
     try:
         # Validate new password

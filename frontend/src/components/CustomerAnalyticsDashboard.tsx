@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled, { css } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CyberpunkCard, CyberpunkButton } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
 import { RetentionRateChart } from './charts/RetentionRateChart';
 import { CustomerSegmentChart } from './charts/CustomerSegmentChart';
 import { ChurnRiskAlert } from './ChurnRiskAlert';
@@ -75,7 +77,6 @@ interface DetailedChurnRisk {
 }
 
 interface CustomerAnalyticsDashboardProps {
-  authToken: string;
   companyId?: string;
 }
 
@@ -428,15 +429,27 @@ const SectionTitle = styled.h4`
 `;
 
 export const CustomerAnalyticsDashboard: React.FC<CustomerAnalyticsDashboardProps> = ({
-  authToken,
   companyId = 'superx_retail_001'
 }) => {
+  const { authToken, isAuthenticated } = useAuth();
+  const { get, post } = useApiClient();
   const [analyticsData, setAnalyticsData] = useState<CustomerAnalyticsData | null>(null);
   const [detailedChurnRisks, setDetailedChurnRisks] = useState<DetailedChurnRisk[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'segments' | 'retention' | 'churn'>('overview');
+
+  // Handle missing authentication
+  if (!isAuthenticated) {
+    return (
+      <DashboardContainer>
+        <ErrorContainer $variant="glass">
+          <ErrorText>Authentication required to access customer analytics</ErrorText>
+        </ErrorContainer>
+      </DashboardContainer>
+    );
+  }
 
   const fetchAnalyticsData = useCallback(async (forceRefresh = false) => {
     try {
@@ -579,9 +592,9 @@ export const CustomerAnalyticsDashboard: React.FC<CustomerAnalyticsDashboardProp
       >
         <DashboardTitle>Customer Analytics</DashboardTitle>
         <CyberpunkButton
-          variant="secondary"
-          size="sm"
-          loading={refreshing}
+          $variant="secondary"
+          $size="sm"
+          $loading={refreshing}
           onClick={() => fetchAnalyticsData(true)}
         >
           {refreshing ? 'Refreshing...' : 'Refresh Data'}

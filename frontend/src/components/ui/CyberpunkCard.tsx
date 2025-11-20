@@ -2,14 +2,21 @@ import React, { ReactNode } from 'react';
 import styled, { css } from 'styled-components';
 import { motion, MotionProps } from 'framer-motion';
 
-interface CyberpunkCardProps extends Omit<MotionProps, 'variant' | 'padding'> {
-  children: ReactNode;
+// Separate interfaces for better type safety
+interface CyberpunkCardStyledProps {
   $variant?: 'default' | 'glass' | 'neon' | 'hologram';
   $padding?: 'sm' | 'md' | 'lg';
   $glitch?: boolean;
   $hover?: boolean;
-  className?: string;
 }
+
+interface CyberpunkCardFunctionalProps extends Omit<MotionProps, 'variant' | 'padding'> {
+  children: ReactNode;
+  className?: string;
+  as?: keyof JSX.IntrinsicElements | React.ComponentType<any>;
+}
+
+interface CyberpunkCardProps extends CyberpunkCardFunctionalProps, CyberpunkCardStyledProps {}
 
 const cardVariants = {
   default: css`
@@ -72,7 +79,16 @@ const paddingVariants = {
   `,
 };
 
-const StyledCard = styled(motion.div)<CyberpunkCardProps>`
+const StyledCard = styled(motion.div).attrs<CyberpunkCardStyledProps>(props => {
+  // Filter out $-prefixed props from DOM to prevent React warnings
+  const filteredProps: Record<string, any> = {};
+  Object.keys(props).forEach(key => {
+    if (!key.startsWith('$')) {
+      filteredProps[key] = props[key as keyof typeof props];
+    }
+  });
+  return filteredProps;
+})<CyberpunkCardStyledProps>`
   border-radius: 8px;
   position: relative;
   overflow: hidden;
@@ -134,20 +150,31 @@ export const CyberpunkCard: React.FC<CyberpunkCardProps> = ({
   $glitch = false,
   $hover = false,
   className,
+  as,
   ...props
 }) => {
+  // Separate styled props from functional props
+  const styledProps: CyberpunkCardStyledProps = {
+    $variant,
+    $padding,
+    $glitch,
+    $hover,
+  };
+
+  const functionalProps = {
+    className,
+    as,
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.5 },
+    whileHover: $hover ? { scale: 1.02 } : {},
+    ...props,
+  };
+
   return (
     <StyledCard
-      $variant={$variant}
-      $padding={$padding}
-      $glitch={$glitch}
-      $hover={$hover}
-      className={className}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      whileHover={$hover ? { scale: 1.02 } : {}}
-      {...props}
+      {...styledProps}
+      {...functionalProps}
     >
       <CardContent>
         {children}

@@ -18,6 +18,8 @@ import { ModelMonitoringDashboard } from './ModelMonitoringDashboard';
 import { ForecastingDashboard } from './ForecastingDashboard';
 import { CustomerAnalyticsDashboard } from './CustomerAnalyticsDashboard';
 import { CyberpunkTheme } from '../theme/cyberpunkTheme';
+import { useAuth } from '../contexts/AuthContext';
+import { useCompanyMetrics } from '../hooks/useCompanyMetrics';
 
 const DashboardContainer = styled.div<{ theme: CyberpunkTheme }>`
   min-height: 100vh;
@@ -285,72 +287,21 @@ interface SystemStatus {
 }
 
 export const MainDashboard: React.FC = () => {
+  const { user, authToken, isAuthenticated, login, logout } = useAuth();
+  const { metrics, systemStatus, loading: metricsLoading } = useCompanyMetrics();
   const [activeView, setActiveView] = useState('company');
   const [loading, setLoading] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<DashboardMetrics>({
-    totalCustomers: 0,
-    retentionRate: 0,
-    forecastAccuracy: 0,
-    systemHealth: 0,
-    activeAlerts: 0,
-    revenueGrowth: 0
-  });
-  const [systemStatus, setSystemStatus] = useState<SystemStatus>({
-    status: 'good',
-    uptime: '99.9%',
-    lastUpdate: new Date().toLocaleTimeString()
-  });
   const [isConnected, setIsConnected] = useState(false);
 
-  // Check for existing authentication on component mount
+  // Set connection status when authenticated
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    const userData = localStorage.getItem('user_data');
-    
-    if (token && userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        setAuthToken(token);
-        setUser(parsedUser);
-        setIsAuthenticated(true);
-      } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        handleLogout();
-      }
+    if (isAuthenticated) {
+      setIsConnected(true);
+    } else {
+      setIsConnected(false);
     }
-  }, []);
-
-  // Simulate real-time data updates
-  useEffect(() => {
-    const updateMetrics = () => {
-      setMetrics({
-        totalCustomers: Math.floor(Math.random() * 1000) + 5000,
-        retentionRate: Math.random() * 0.3 + 0.7, // 70-100%
-        forecastAccuracy: Math.random() * 0.2 + 0.8, // 80-100%
-        systemHealth: Math.random() * 0.3 + 0.7, // 70-100%
-        activeAlerts: Math.floor(Math.random() * 5),
-        revenueGrowth: Math.random() * 0.4 + 0.8 // 80-120%
-      });
-      
-      setSystemStatus({
-        status: Math.random() > 0.8 ? 'excellent' : 'good',
-        uptime: `${(99.5 + Math.random() * 0.5).toFixed(1)}%`,
-        lastUpdate: new Date().toLocaleTimeString()
-      });
-    };
-
-    // Initial load
-    updateMetrics();
-    setIsConnected(true);
-
-    // Update every 5 seconds
-    const interval = setInterval(updateMetrics, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [isAuthenticated]);
 
   const navigationItems: NavigationItem[] = [
     {
@@ -358,14 +309,14 @@ export const MainDashboard: React.FC = () => {
       label: 'Company',
       active: activeView === 'company',
       onClick: () => setActiveView('company'),
-      badge: 'DATA',
+      badge: metrics.ragStatus === 'initialized' ? 'READY' : 'SETUP',
     },
     {
       id: 'models',
       label: 'Model Status',
       active: activeView === 'models',
       onClick: () => setActiveView('models'),
-      badge: '5',
+      badge: metrics.ragStatus === 'initialized' ? '✓' : '!',
     },
     {
       id: 'forecasting',
@@ -379,45 +330,37 @@ export const MainDashboard: React.FC = () => {
       label: 'Analytics',
       active: activeView === 'analytics',
       onClick: () => setActiveView('analytics'),
-      badge: `${Math.floor(metrics.retentionRate * 100)}%`,
+      badge: metrics.retentionRate > 0 ? `${Math.floor(metrics.retentionRate * 100)}%` : 'N/A',
     },
     {
       id: 'insights',
       label: 'AI Insights',
       active: activeView === 'insights',
       onClick: () => setActiveView('insights'),
-      badge: 'LIVE',
+      badge: metrics.ragStatus === 'initialized' ? 'LIVE' : 'OFF',
     },
     {
       id: 'health',
       label: 'System Health',
       active: activeView === 'health',
       onClick: () => setActiveView('health'),
-      badge: systemStatus.status === 'excellent' ? '✓' : '!',
+      badge: systemStatus.status === 'excellent' ? '✓' : systemStatus.status === 'good' ? '○' : '!',
     },
     {
       id: 'chatbot',
       label: 'AI Assistant',
       active: chatOpen,
       onClick: () => setChatOpen(true),
-      badge: 'AI',
+      badge: metrics.ragStatus === 'initialized' ? 'AI' : 'OFF',
     },
   ];
 
   const handleLogin = (token: string, userData: any) => {
-    localStorage.setItem('auth_token', token);
-    localStorage.setItem('user_data', JSON.stringify(userData));
-    setAuthToken(token);
-    setUser(userData);
-    setIsAuthenticated(true);
+    login(token, userData);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_data');
-    setAuthToken(null);
-    setUser(null);
-    setIsAuthenticated(false);
+    logout();
   };
 
   const handleDemoAction = (action: string) => {
@@ -445,7 +388,6 @@ export const MainDashboard: React.FC = () => {
 
         {/* Integrated Data Upload Section */}
         <DataUpload 
-          authToken={authToken} 
           onUploadComplete={(result) => {
             console.log('Data uploaded successfully:', result);
             // Automatically switch to models view to show ensemble status
@@ -457,57 +399,57 @@ export const MainDashboard: React.FC = () => {
         />
 
         {/* Ensemble Status Section */}
-        <EnsembleStatus authToken={authToken} />
+        <EnsembleStatus />
   
         <ContentGrid>
-          <DemoCard variant="glass" hover>
+          <DemoCard $variant="glass" $hover>
             <CardTitle>🔮 Generate Forecasts</CardTitle>
             <CardDescription>
               Generate adaptive ensemble forecasts with confidence intervals (P10/P50/P90). 
               System automatically updates model weights based on performance.
             </CardDescription>
             <CyberpunkButton
-              variant="primary"
+              $variant="primary"
               onClick={() => setActiveView('forecasting')}
             >
               Generate Forecast
             </CyberpunkButton>
           </DemoCard>
   
-          <DemoCard variant="neon" hover>
+          <DemoCard $variant="neon" $hover>
             <CardTitle>📈 Performance Analytics</CardTitle>
             <CardDescription>
               Analyze model performance evolution, weight changes over time, 
               and forecast accuracy metrics with detailed visualizations.
             </CardDescription>
             <CyberpunkButton
-              variant="secondary"
+              $variant="secondary"
               onClick={() => setActiveView('analytics')}
             >
               View Analytics
             </CyberpunkButton>
           </DemoCard>
 
-          <DemoCard variant="hologram" hover>
+          <DemoCard $variant="hologram" $hover>
             <CardTitle>🧠 AI Insights Engine</CardTitle>
             <CardDescription>
               Automated business insight generation with anomaly detection and pattern recognition.
             </CardDescription>
             <CyberpunkButton
-              variant="primary"
+              $variant="primary"
               onClick={() => setActiveView('insights')}
             >
               Generate Insights
             </CyberpunkButton>
           </DemoCard>
 
-          <DemoCard variant="glass" hover>
+          <DemoCard $variant="glass" $hover>
             <CardTitle>⚡ System Health</CardTitle>
             <CardDescription>
               Real-time system monitoring with predictive maintenance and performance metrics.
             </CardDescription>
             <CyberpunkButton
-              variant="secondary"
+              $variant="secondary"
               onClick={() => setActiveView('health')}
             >
               View System Health
@@ -519,43 +461,63 @@ export const MainDashboard: React.FC = () => {
   };
 
   const renderForecastingContent = () => (
-    <ForecastingDashboard authToken={authToken} />
+    <ForecastingDashboard />
   );
 
   const renderAnalyticsContent = () => (
-    <CustomerAnalyticsDashboard authToken={authToken} />
+    <CustomerAnalyticsDashboard />
   );
 
   const renderInsightsContent = () => (
     <ContentGrid>
-      <DemoCard variant="glass" hover>
+      <DemoCard $variant="glass" $hover>
         <CardTitle>🧠 AI Insights Engine</CardTitle>
         <CardDescription>
-          Automated business insight generation with anomaly detection.
-          Active insights: {Math.floor(Math.random() * 10) + 5}
+          {metrics.ragStatus === 'initialized' 
+            ? `Automated business insight generation for ${user?.company_name}. Documents processed: ${metrics.totalDocuments}`
+            : 'Upload your data to activate AI insights and anomaly detection.'
+          }
         </CardDescription>
-        <CyberpunkButton variant="primary" onClick={() => handleDemoAction('ai-insights')}>
-          Generate Insights
+        <CyberpunkButton 
+          $variant="primary" 
+          onClick={() => handleDemoAction('ai-insights')}
+          disabled={metrics.ragStatus !== 'initialized'}
+        >
+          {metrics.ragStatus === 'initialized' ? 'Generate Insights' : 'Upload Data First'}
         </CyberpunkButton>
       </DemoCard>
 
-      <DemoCard variant="neon" hover>
+      <DemoCard $variant="neon" $hover>
         <CardTitle>🔍 Anomaly Detection</CardTitle>
         <CardDescription>
-          Real-time outlier identification with 99.5% accuracy.
+          {metrics.ragStatus === 'initialized' 
+            ? `Real-time outlier identification for ${user?.business_type} business patterns.`
+            : 'Requires data upload to detect business anomalies.'
+          }
         </CardDescription>
-        <CyberpunkButton variant="secondary" onClick={() => handleDemoAction('anomaly-detection')}>
-          Detect Anomalies
+        <CyberpunkButton 
+          $variant="secondary" 
+          onClick={() => handleDemoAction('anomaly-detection')}
+          disabled={metrics.ragStatus !== 'initialized'}
+        >
+          {metrics.ragStatus === 'initialized' ? 'Detect Anomalies' : 'Setup Required'}
         </CyberpunkButton>
       </DemoCard>
 
-      <DemoCard variant="hologram" hover>
+      <DemoCard $variant="hologram" $hover>
         <CardTitle>📊 Trend Analysis</CardTitle>
         <CardDescription>
-          Advanced trend detection and pattern recognition.
+          {metrics.ragStatus === 'initialized' 
+            ? `Advanced trend detection for ${user?.company_name} data patterns.`
+            : 'Upload historical data to enable trend analysis.'
+          }
         </CardDescription>
-        <CyberpunkButton variant="primary" onClick={() => handleDemoAction('trend-analysis')}>
-          Analyze Trends
+        <CyberpunkButton 
+          $variant="primary" 
+          onClick={() => handleDemoAction('trend-analysis')}
+          disabled={metrics.ragStatus !== 'initialized'}
+        >
+          {metrics.ragStatus === 'initialized' ? 'Analyze Trends' : 'Data Required'}
         </CyberpunkButton>
       </DemoCard>
     </ContentGrid>
@@ -563,34 +525,40 @@ export const MainDashboard: React.FC = () => {
 
   const renderHealthContent = () => (
     <ContentGrid>
-      <DemoCard variant="neon" hover>
+      <DemoCard $variant="neon" $hover>
         <CardTitle>⚡ System Monitor</CardTitle>
         <CardDescription>
-          Real-time system health monitoring with predictive maintenance.
+          {user?.company_name} system health monitoring.
           Current health: {(metrics.systemHealth * 100).toFixed(0)}%
+          {metrics.lastDataUpload && ` • Last upload: ${new Date(metrics.lastDataUpload).toLocaleDateString()}`}
         </CardDescription>
-        <CyberpunkButton variant="primary" onClick={() => handleDemoAction('system-monitor')}>
+        <CyberpunkButton $variant="primary" onClick={() => handleDemoAction('system-monitor')}>
           View Details
         </CyberpunkButton>
       </DemoCard>
 
-      <DemoCard variant="hologram" hover>
-        <CardTitle>🔧 Predictive Maintenance</CardTitle>
+      <DemoCard $variant="hologram" $hover>
+        <CardTitle>🔧 AI System Status</CardTitle>
         <CardDescription>
-          95% accuracy equipment failure prediction.
-          Active alerts: {metrics.activeAlerts}
+          RAG Status: {metrics.ragStatus === 'initialized' ? 'Active' : 'Not Initialized'}
+          {metrics.activeAlerts > 0 && ` • Active alerts: ${metrics.activeAlerts}`}
+          {metrics.totalDocuments > 0 && ` • Documents: ${metrics.totalDocuments}`}
         </CardDescription>
-        <CyberpunkButton variant="danger" onClick={() => handleDemoAction('predictive-maintenance')}>
-          Check Predictions
+        <CyberpunkButton 
+          $variant={metrics.activeAlerts > 0 ? "danger" : "secondary"} 
+          onClick={() => handleDemoAction('predictive-maintenance')}
+        >
+          {metrics.activeAlerts > 0 ? 'Check Alerts' : 'System OK'}
         </CyberpunkButton>
       </DemoCard>
 
-      <DemoCard variant="glass" hover>
+      <DemoCard $variant="glass" $hover>
         <CardTitle>📊 Performance Metrics</CardTitle>
         <CardDescription>
-          Comprehensive system performance analytics and optimization.
+          {user?.company_name} performance analytics.
+          Forecast accuracy: {metrics.forecastAccuracy > 0 ? `${(metrics.forecastAccuracy * 100).toFixed(1)}%` : 'N/A'}
         </CardDescription>
-        <CyberpunkButton variant="secondary" onClick={() => handleDemoAction('performance-metrics')}>
+        <CyberpunkButton $variant="secondary" onClick={() => handleDemoAction('performance-metrics')}>
           View Metrics
         </CyberpunkButton>
       </DemoCard>
@@ -610,14 +578,14 @@ export const MainDashboard: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
         >
-          {user?.company_name || 'X-FORECAST'}
+          {user?.company_name || 'Your Company'}
         </Title>
         <Subtitle
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
         >
-          Cyberpunk AI Business Intelligence
+          {user?.business_type ? `${user.business_type.charAt(0).toUpperCase() + user.business_type.slice(1)} AI Intelligence` : 'AI Business Intelligence'}
         </Subtitle>
       </Header>
 
@@ -639,6 +607,10 @@ export const MainDashboard: React.FC = () => {
         <StatusItem>
           <span>Last Update: </span>
           <span className="metric-value">{systemStatus.lastUpdate}</span>
+        </StatusItem>
+        <StatusItem>
+          <span>Company: </span>
+          <span className="metric-value">{user?.company_name || 'N/A'}</span>
         </StatusItem>
         <StatusItem>
           <span>User: </span>
@@ -726,8 +698,8 @@ export const MainDashboard: React.FC = () => {
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
           >
-            <EnsembleStatus authToken={authToken} />
-            <ModelMonitoringDashboard authToken={authToken} />
+            <EnsembleStatus />
+            <ModelMonitoringDashboard />
           </motion.div>
         )}
         
@@ -826,7 +798,7 @@ export const MainDashboard: React.FC = () => {
           <EnsembleChatInterface
             isOpen={chatOpen}
             onClose={() => setChatOpen(false)}
-            companyId={user?.company_name || 'superx'}
+            companyId={user?.company_id || user?.company_name || 'default'}
           />
         )}
       </AnimatePresence>

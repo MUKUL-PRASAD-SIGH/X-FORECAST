@@ -18,10 +18,7 @@ import {
   PieChart,
   Pie
 } from 'recharts';
-
-// Type fix for Recharts components
-const PolarAngleAxisFixed = PolarAngleAxis as any;
-const PolarRadiusAxisFixed = PolarRadiusAxis as any;
+import { ChartWrapper, validateChartData, normalizeChartData } from './ChartWrapper';
 
 interface CustomerSegment {
   segment_id: string;
@@ -227,7 +224,9 @@ export const CustomerSegmentChart: React.FC<CustomerSegmentChartProps> = ({
   ];
 
   const barChartData = useMemo(() => {
-    return segments.map((segment, index) => ({
+    if (!segments || segments.length === 0) return [];
+    
+    const data = segments.map((segment, index) => ({
       name: segment.segment_name.length > 12 
         ? segment.segment_name.substring(0, 12) + '...' 
         : segment.segment_name,
@@ -240,27 +239,56 @@ export const CustomerSegmentChart: React.FC<CustomerSegmentChartProps> = ({
       growth: Math.round(segment.growth_rate),
       color: segmentColors[index % segmentColors.length]
     }));
+    
+    return normalizeChartData(data, ['name', 'health']);
   }, [segments]);
 
   const radarChartData = useMemo(() => {
-    return segments.map((segment, index) => ({
-      segment: segment.segment_name,
-      LTV: Math.min(segment.avg_ltv / 100, 100), // Normalize to 0-100
-      Retention: segment.avg_retention_rate * 100,
-      Revenue: segment.revenue_contribution,
-      Health: segment.health_score,
-      Growth: Math.max(0, Math.min(segment.growth_rate + 50, 100)), // Normalize growth rate
-      color: segmentColors[index % segmentColors.length]
-    }));
+    if (!segments || segments.length === 0) return [];
+    
+    // Transform data for RadarChart - each metric becomes a data point
+    const metrics = ['LTV', 'Retention', 'Revenue', 'Health', 'Growth'];
+    
+    return metrics.map(metric => {
+      const dataPoint: any = { subject: metric };
+      
+      segments.slice(0, 3).forEach((segment, index) => {
+        let value = 0;
+        switch (metric) {
+          case 'LTV':
+            value = Math.min(segment.avg_ltv / 100, 100);
+            break;
+          case 'Retention':
+            value = segment.avg_retention_rate * 100;
+            break;
+          case 'Revenue':
+            value = segment.revenue_contribution;
+            break;
+          case 'Health':
+            value = segment.health_score;
+            break;
+          case 'Growth':
+            value = Math.max(0, Math.min(segment.growth_rate + 50, 100));
+            break;
+        }
+        dataPoint[segment.segment_name] = value;
+      });
+      
+      return dataPoint;
+    });
   }, [segments]);
 
   const pieChartData = useMemo(() => {
-    return segments.map((segment, index) => ({
+    if (!segments || segments.length === 0) return [];
+    
+    const data = segments.map((segment, index) => ({
       name: segment.segment_name,
       value: segment.revenue_contribution,
       customers: segment.customer_count,
       color: segmentColors[index % segmentColors.length]
     }));
+    
+    return normalizeChartData(data, ['name', 'value']);
   }, [segments]);
 
   const topPerformingSegment = useMemo(() => {
@@ -319,22 +347,20 @@ export const CustomerSegmentChart: React.FC<CustomerSegmentChartProps> = ({
   };
 
   const renderBarChart = () => (
-    <ResponsiveContainer width="100%" height="70%">
+    <ChartWrapper data={barChartData}>
       <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(57, 255, 20, 0.2)" />
         <XAxis 
           dataKey="name" 
           stroke="#39ff14"
-          fontSize={10}
-          fontFamily="Courier New, monospace"
+          tick={{ fontSize: 10, fontFamily: "Courier New, monospace" }}
           angle={-45}
           textAnchor="end"
           height={80}
         />
         <YAxis 
           stroke="#39ff14"
-          fontSize={10}
-          fontFamily="Courier New, monospace"
+          tick={{ fontSize: 10, fontFamily: "Courier New, monospace" }}
         />
         <Tooltip content={<CustomTooltipComponent />} />
         
@@ -344,39 +370,49 @@ export const CustomerSegmentChart: React.FC<CustomerSegmentChartProps> = ({
           ))}
         </Bar>
       </BarChart>
-    </ResponsiveContainer>
+    </ChartWrapper>
   );
 
-  const renderRadarChart = () => (
-    <ResponsiveContainer width="100%" height="70%">
-      <RadarChart data={radarChartData[0] ? [radarChartData[0]] : []}>
-        />
-        <PolarRadiusAxisFixed 
-          angle={90} 
-          domain={[0, 100]}
-          tick={{ fontSize: 10, fill: '#39ff14' }}
-        />olarRadiusAxis 
-          angle={90} 
-          domain={[0, 100]}
-          tick={{ fontSize: 10, fill: '#39ff14' }}
-        />
-        {radarChartData.slice(0, 3).map((segment, index) => (
-          <Radar
-            key={segment.segment}
-            name={segment.segment}
-            dataKey={(key) => segment[key as keyof typeof segment]}
-            stroke={segment.color}
-            fill={segment.color}
-            fillOpacity={0.2}
-            strokeWidth={2}
+  const renderRadarChart = () => {
+    if (!radarChartData || radarChartData.length === 0) {
+      return (
+        <ChartWrapper data={[]}>
+          <div>No radar chart data available</div>
+        </ChartWrapper>
+      );
+    }
+    
+    return (
+      <ChartWrapper data={radarChartData}>
+        <RadarChart data={radarChartData}>
+          <PolarGrid stroke="rgba(57, 255, 20, 0.3)" />
+          {React.createElement(PolarAngleAxis as any, {
+            dataKey: "subject",
+            tick: { fontSize: 10, fill: '#39ff14', fontFamily: 'Courier New, monospace' }
+          })}
+          <PolarRadiusAxis 
+            angle={90} 
+            domain={[0, 100]}
+            tick={{ fontSize: 10, fill: '#39ff14', fontFamily: 'Courier New, monospace' }}
           />
-        ))}
-      </RadarChart>
-    </ResponsiveContainer>
-  );
+          {segments.slice(0, 3).map((segment, index) => (
+            <Radar
+              key={segment.segment_id}
+              name={segment.segment_name}
+              dataKey={segment.segment_name}
+              stroke={segmentColors[index % segmentColors.length]}
+              fill={segmentColors[index % segmentColors.length]}
+              fillOpacity={0.2}
+              strokeWidth={2}
+            />
+          ))}
+        </RadarChart>
+      </ChartWrapper>
+    );
+  };
 
   const renderPieChart = () => (
-    <ResponsiveContainer width="100%" height="70%">
+    <ChartWrapper data={pieChartData}>
       <PieChart>
         <Pie
           data={pieChartData}
@@ -401,7 +437,7 @@ export const CustomerSegmentChart: React.FC<CustomerSegmentChartProps> = ({
         </Pie>
         <Tooltip content={<CustomPieTooltip />} />
       </PieChart>
-    </ResponsiveContainer>
+    </ChartWrapper>
   );
 
   if (!segments || segments.length === 0) {

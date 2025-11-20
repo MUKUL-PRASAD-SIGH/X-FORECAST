@@ -402,15 +402,15 @@ export const RecommendationCard: React.FC<RecommendationCardProps> = ({
       
       <ActionsContainer>
         <CyberpunkButton
-          variant="secondary"
-          size="sm"
+          $variant="secondary"
+          $size="sm"
           onClick={handleViewDetails}
         >
           View Details
         </CyberpunkButton>
         <CyberpunkButton
-          variant="primary"
-          size="sm"
+          $variant="primary"
+          $size="sm"
           onClick={handleImplement}
         >
           Implement

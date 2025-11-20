@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CyberpunkCard, CyberpunkButton } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
+import { ExtendedEnsembleMetrics as EnsembleMetrics } from '../types/fixes';
 
 // Animation keyframes
 const scanLine = keyframes`
@@ -328,26 +331,17 @@ interface ModelPerformance {
   error_rate: number;
 }
 
-interface EnsembleMetrics {
-  overall_accuracy: number;
-  model_performances: ModelPerformance[];
-  weight_evolution: any[];
-  confidence_score: number;
-  prediction_reliability: number;
-  last_updated: string;
-  total_predictions: number;
-  system_health: number;
-}
+// EnsembleMetrics interface is imported from types
 
 interface ModelMonitoringDashboardProps {
-  authToken: string;
   companyId?: string;
 }
 
 export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> = ({ 
-  authToken, 
   companyId 
 }) => {
+  const { authToken, isAuthenticated } = useAuth();
+  const { get, post } = useApiClient();
   const [metrics, setMetrics] = useState<EnsembleMetrics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -363,6 +357,17 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
     croston: '#9d4edd'
   };
 
+  // Handle missing authentication
+  if (!isAuthenticated) {
+    return (
+      <DashboardContainer $variant="glass" $padding="lg">
+        <div style={{ textAlign: 'center', color: '#ff0040' }}>
+          Authentication required to access model monitoring
+        </div>
+      </DashboardContainer>
+    );
+  }
+
   // Fetch performance metrics
   const fetchMetrics = useCallback(async () => {
     if (loading) return;
@@ -370,19 +375,20 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
     setLoading(true);
     setError(null);
 
+    if (!isAuthenticated || !authToken) {
+      setError('Authentication required for model monitoring data');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:8000/api/company-sales/ensemble/performance', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+      const response = await get('http://localhost:8000/api/company-sales/ensemble/performance');
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (response.success && response.data) {
+        setMetrics(response.data as EnsembleMetrics);
+      } else {
+        throw new Error('Failed to fetch ensemble performance metrics');
       }
-
-      const data = await response.json();
-      setMetrics(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(errorMessage);
@@ -390,7 +396,7 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
     } finally {
       setLoading(false);
     }
-  }, [authToken, loading]);
+  }, [isAuthenticated, authToken, get, loading]);
 
   // WebSocket connection for real-time updates
   const connectWebSocket = useCallback(() => {
@@ -398,11 +404,16 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
       wsConnection.close();
     }
 
+    if (!authToken) {
+      console.log('No auth token, skipping WebSocket connection');
+      return;
+    }
+
     try {
       const ws = new WebSocket(`ws://localhost:8000/api/company-sales/ws/ensemble-performance/${authToken}`);
       
       ws.onopen = () => {
-        console.log('WebSocket connected for model monitoring');
+        console.log('WebSocket connected successfully');
         setConnected(true);
         setError(null);
       };
@@ -412,37 +423,49 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
           const data = JSON.parse(event.data);
           setMetrics(data);
         } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+          console.error('WebSocket message parse error:', err);
         }
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('WebSocket closed:', event.code);
         setConnected(false);
-        // Attempt to reconnect after 5 seconds
-        setTimeout(connectWebSocket, 5000);
+        
+        if (event.code !== 1000 && event.code !== 1001) {
+          setTimeout(connectWebSocket, 5000);
+        }
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      ws.onerror = () => {
+        console.log('WebSocket error - using polling mode');
         setConnected(false);
-        setError('WebSocket connection failed');
+        setError(null);
       };
 
       setWsConnection(ws);
     } catch (err) {
-      console.error('Failed to create WebSocket connection:', err);
-      setError('Failed to establish real-time connection');
+      console.log('WebSocket creation failed - using polling mode');
+      setError(null);
     }
-  }, [authToken, wsConnection]);
+  }, [authToken]);
 
   // Initialize component
   useEffect(() => {
     fetchMetrics();
+    
+    // Try WebSocket first, but don't block if it fails
+    const wsTimeout = setTimeout(() => {
+      if (!connected) {
+        console.log('WebSocket connection timeout, using polling mode');
+        setError('Using polling mode for updates');
+      }
+    }, 3000);
+    
     connectWebSocket();
 
     // Cleanup on unmount
     return () => {
+      clearTimeout(wsTimeout);
       if (wsConnection) {
         wsConnection.close();
       }
@@ -452,7 +475,9 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
   // Fallback polling if WebSocket fails
   useEffect(() => {
     if (!connected && !loading) {
-      const interval = setInterval(fetchMetrics, 10000); // Poll every 10 seconds
+      const interval = setInterval(() => {
+        fetchMetrics();
+      }, 5000); // Poll every 5 seconds when WebSocket is down
       return () => clearInterval(interval);
     }
   }, [connected, loading, fetchMetrics]);
@@ -477,11 +502,11 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
 
   if (error && !metrics) {
     return (
-      <DashboardContainer variant="neon">
+      <DashboardContainer $variant="neon">
         <div style={{ textAlign: 'center', padding: '2rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '1rem', color: '#ff6b6b' }}>⚠️</div>
           <div style={{ color: '#ff6b6b', marginBottom: '1rem' }}>{error}</div>
-          <CyberpunkButton variant="primary" onClick={fetchMetrics}>
+          <CyberpunkButton $variant="primary" onClick={fetchMetrics}>
             Retry Connection
           </CyberpunkButton>
         </div>
@@ -490,17 +515,20 @@ export const ModelMonitoringDashboard: React.FC<ModelMonitoringDashboardProps> =
   }
 
   return (
-    <DashboardContainer variant="hologram">
+    <DashboardContainer $variant="hologram">
       <DashboardHeader>
         <h2>🤖 Model Performance Monitor</h2>
         <div className="status-indicator">
-          <div className="status-dot" />
+          <div className="status-dot" style={{
+            background: connected ? '#39ff14' : '#ff6b35',
+            boxShadow: connected ? '0 0 10px #39ff14' : '0 0 10px #ff6b35'
+          }} />
           <span>{connected ? 'Live Updates' : 'Polling Mode'}</span>
           <RefreshButton 
-            variant="secondary" 
-            size="sm"
+            $variant="secondary" 
+            $size="sm"
             onClick={fetchMetrics}
-            loading={loading}
+            $loading={loading}
           >
             Refresh
           </RefreshButton>

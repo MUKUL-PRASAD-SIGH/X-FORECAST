@@ -537,8 +537,8 @@ Would you like to create an action plan for this item?
             {loading ? 'Analyzing' : error ? 'Error' : 'Ready'}
           </StatusIndicator>
           <CyberpunkButton
-            variant="secondary"
-            size="sm"
+            $variant="secondary"
+            $size="sm"
             onClick={handleRefreshInsights}
             disabled={loading}
           >
@@ -558,7 +558,7 @@ Would you like to create an action plan for this item?
       <ContentGrid>
         <MainContent>
           {/* Business Insights Section */}
-          <SectionContainer variant="glass">
+          <SectionContainer $variant="glass">
             <AnimatePresence>
               {loading && (
                 <LoadingOverlay
@@ -577,8 +577,8 @@ Would you like to create an action plan for this item?
                 {insightTypes.map(type => (
                   <FilterButton
                     key={type}
-                    variant="ghost"
-                    size="sm"
+                    $variant="ghost"
+                    $size="sm"
                     active={activeInsightFilter === type}
                     onClick={() => setActiveInsightFilter(type)}
                   >
@@ -615,15 +615,15 @@ Would you like to create an action plan for this item?
           </SectionContainer>
 
           {/* Recommendations Section */}
-          <SectionContainer variant="neon">
+          <SectionContainer $variant="neon">
             <SectionHeader>
               <SectionTitle>🎯 Strategic Recommendations</SectionTitle>
               <FilterContainer>
                 {priorityLevels.map(priority => (
                   <FilterButton
                     key={priority}
-                    variant="ghost"
-                    size="sm"
+                    $variant="ghost"
+                    $size="sm"
                     active={activePriorityFilter === priority}
                     onClick={() => setActivePriorityFilter(priority)}
                   >
@@ -778,8 +778,8 @@ Would you like to create an action plan for this item?
                 zIndex: 1001
               }}>
                 <CyberpunkButton
-                  variant="secondary"
-                  size="sm"
+                  $variant="secondary"
+                  $size="sm"
                   onClick={() => setShowTimeline(false)}
                 >
                   ✕ Close

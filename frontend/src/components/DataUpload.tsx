@@ -1,53 +1,111 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CyberpunkButton, CyberpunkCard } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useEnhancedApiClient } from '../hooks/useEnhancedApiClient';
+
+// Simple logger for client-side error tracking
+const logger = {
+  error: (message: string, error?: any) => {
+    console.error(message, error);
+  },
+  warn: (message: string, data?: any) => {
+    console.warn(message, data);
+  },
+  info: (message: string, data?: any) => {
+    console.info(message, data);
+  }
+};
 
 const UploadContainer = styled(CyberpunkCard)`
   padding: 2rem;
   margin: 1rem 0;
 `;
 
-const DropZone = styled.div<{ isDragOver: boolean; hasFile: boolean }>`
+const pulseGlow = keyframes`
+  0% { box-shadow: 0 0 5px rgba(0, 255, 255, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 30px rgba(255, 20, 147, 0.4); }
+  100% { box-shadow: 0 0 5px rgba(0, 255, 255, 0.3); }
+`;
+
+const scanLine = keyframes`
+  0% { left: -100%; }
+  100% { left: 100%; }
+`;
+
+const dataFlow = keyframes`
+  0% { transform: translateX(-100%) scaleX(0); }
+  50% { transform: translateX(0%) scaleX(1); }
+  100% { transform: translateX(100%) scaleX(0); }
+`;
+
+const DropZone = styled.div<{ isDragOver: boolean; hasFile: boolean; isProcessing: boolean }>`
   border: 2px dashed ${props => 
     props.hasFile ? props.theme.colors.acidGreen :
     props.isDragOver ? props.theme.colors.neonBlue : 
     props.theme.colors.secondaryText
   };
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 2rem;
   text-align: center;
   background: ${props => 
-    props.hasFile ? 'rgba(0, 255, 127, 0.1)' :
-    props.isDragOver ? 'rgba(0, 212, 255, 0.1)' : 
-    'transparent'
+    props.hasFile ? 'rgba(57, 255, 20, 0.1)' :
+    props.isDragOver ? 'rgba(0, 255, 255, 0.15)' : 
+    'rgba(10, 10, 10, 0.8)'
   };
   transition: all 0.3s ease;
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(10px);
+  
+  ${props => props.isProcessing && css`
+    animation: ${pulseGlow} 2s ease-in-out infinite;
+    border-color: ${props.theme.colors.hotPink};
+  `}
   
   &:hover {
     border-color: ${props => props.theme.colors.neonBlue};
-    background: rgba(0, 212, 255, 0.05);
+    background: rgba(0, 255, 255, 0.1);
+    transform: translateY(-2px);
+    box-shadow: ${props => props.theme.effects.softGlow};
   }
   
+  /* Animated scanning line */
   &::before {
     content: '';
     position: absolute;
     top: 0;
     left: -100%;
     width: 100%;
-    height: 2px;
+    height: 3px;
     background: ${props => props.theme.effects.primaryGradient};
     ${props => props.isDragOver && css`
-      animation: scan 1s infinite;
+      animation: ${scanLine} 1.5s ease-in-out infinite;
     `}
+    z-index: 2;
   }
   
-  @keyframes scan {
-    0% { left: -100%; }
-    100% { left: 100%; }
+  /* Data flow effect when processing */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, ${props => props.theme.colors.acidGreen}, transparent);
+    transform: translateY(-50%);
+    ${props => props.isProcessing && css`
+      animation: ${dataFlow} 2s ease-in-out infinite;
+    `}
+    z-index: 1;
+  }
+  
+  /* Corner accents */
+  &:hover::before {
+    animation: ${scanLine} 1s ease-in-out infinite;
   }
 `;
 
@@ -123,6 +181,57 @@ const DataQualityIndicator = styled(motion.div)<{ quality: number }>`
   };
   border-radius: 4px;
   
+  .quality-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    
+    .quality-title {
+      font-family: ${props => props.theme.typography.fontFamily.mono};
+      font-weight: bold;
+      color: ${props => props.theme.colors.neonBlue};
+      text-transform: uppercase;
+    }
+    
+    .quality-score {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: ${props => 
+        props.quality >= 0.8 ? props.theme.colors.acidGreen :
+        props.quality >= 0.6 ? props.theme.colors.neonBlue :
+        props.theme.colors.error
+      };
+    }
+  }
+  
+  .quality-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    
+    .quality-metric {
+      text-align: center;
+      padding: 0.5rem;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 4px;
+      
+      .metric-label {
+        font-size: 0.7rem;
+        color: ${props => props.theme.colors.secondaryText};
+        text-transform: uppercase;
+        margin-bottom: 0.25rem;
+      }
+      
+      .metric-value {
+        font-size: 0.9rem;
+        font-weight: bold;
+        color: ${props => props.theme.colors.acidGreen};
+      }
+    }
+  }
+  
   .quality-bar {
     width: 100%;
     height: 8px;
@@ -141,6 +250,59 @@ const DataQualityIndicator = styled(motion.div)<{ quality: number }>`
       width: ${props => props.quality * 100}%;
       transition: width 0.5s ease;
       box-shadow: 0 0 10px currentColor;
+    }
+  }
+  
+  .quality-issues {
+    margin-top: 1rem;
+    
+    .issues-title {
+      font-size: 0.8rem;
+      color: ${props => props.theme.colors.error};
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .issue-item {
+      font-size: 0.7rem;
+      color: ${props => props.theme.colors.secondaryText};
+      margin-bottom: 0.25rem;
+      padding-left: 1rem;
+      position: relative;
+      
+      &::before {
+        content: '⚠';
+        position: absolute;
+        left: 0;
+        color: ${props => props.theme.colors.warning};
+      }
+    }
+  }
+  
+  .quality-recommendations {
+    margin-top: 1rem;
+    
+    .recommendations-title {
+      font-size: 0.8rem;
+      color: ${props => props.theme.colors.neonBlue};
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+    }
+    
+    .recommendation-item {
+      font-size: 0.7rem;
+      color: ${props => props.theme.colors.secondaryText};
+      margin-bottom: 0.25rem;
+      padding-left: 1rem;
+      position: relative;
+      
+      &::before {
+        content: '💡';
+        position: absolute;
+        left: 0;
+      }
     }
   }
 `;
@@ -187,43 +349,170 @@ const ProcessingSteps = styled(motion.div)`
   }
 `;
 
+const progressPulse = keyframes`
+  0% { box-shadow: 0 0 5px rgba(0, 255, 255, 0.5); }
+  50% { box-shadow: 0 0 15px rgba(0, 255, 255, 0.8), 0 0 25px rgba(255, 20, 147, 0.6); }
+  100% { box-shadow: 0 0 5px rgba(0, 255, 255, 0.5); }
+`;
+
 const ProgressBar = styled(motion.div)`
   margin-top: 1rem;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid ${props => props.theme.colors.neonBlue};
-  border-radius: 4px;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid ${props => props.theme.colors.neonBlue};
+  border-radius: 8px;
+  backdrop-filter: blur(15px);
+  animation: ${progressPulse} 3s ease-in-out infinite;
   
   .progress-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
     font-family: ${props => props.theme.typography.fontFamily.mono};
-    font-size: ${props => props.theme.typography.fontSize.sm};
+    font-size: ${props => props.theme.typography.fontSize.md};
     color: ${props => props.theme.colors.neonBlue};
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }
   
   .progress-track {
     width: 100%;
-    height: 8px;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 4px;
+    height: 12px;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 6px;
     overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(0, 255, 255, 0.3);
     
     .progress-fill {
       height: 100%;
       background: ${props => props.theme.effects.primaryGradient};
-      transition: width 0.3s ease;
-      box-shadow: 0 0 10px ${props => props.theme.colors.neonBlue};
+      transition: width 0.5s ease;
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+      position: relative;
+      
+      &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 20px;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6));
+        animation: ${scanLine} 2s ease-in-out infinite;
+      }
     }
   }
   
   .current-operation {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: ${props => props.theme.colors.acidGreen};
+    font-family: ${props => props.theme.typography.fontFamily.mono};
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .progress-stats {
+    display: flex;
+    justify-content: space-between;
     margin-top: 0.5rem;
     font-size: 0.8rem;
     color: ${props => props.theme.colors.secondaryText};
-    font-style: italic;
+    font-family: ${props => props.theme.typography.fontFamily.mono};
+  }
+`;
+
+const UploadModeSelector = styled(motion.div)`
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+`;
+
+const ModeButton = styled(motion.button)<{ isActive: boolean }>`
+  padding: 0.5rem 1rem;
+  background: ${props => props.isActive ? props.theme.effects.primaryGradient : 'transparent'};
+  color: ${props => props.isActive ? props.theme.colors.darkBg : props.theme.colors.neonBlue};
+  border: 2px solid ${props => props.theme.colors.neonBlue};
+  border-radius: 6px;
+  font-family: ${props => props.theme.typography.fontFamily.mono};
+  font-size: ${props => props.theme.typography.fontSize.sm};
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  
+  &:hover {
+    box-shadow: ${props => props.theme.effects.softGlow};
+    transform: translateY(-2px);
+  }
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+  }
+  
+  &:hover::before {
+    left: 100%;
+  }
+`;
+
+const LiveAnalysisPanel = styled(motion.div)`
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(57, 255, 20, 0.1);
+  border: 1px solid ${props => props.theme.colors.acidGreen};
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  
+  .analysis-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: ${props => props.theme.colors.acidGreen};
+    font-family: ${props => props.theme.typography.fontFamily.mono};
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+  
+  .analysis-item {
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 6px;
+    border-left: 3px solid ${props => props.theme.colors.acidGreen};
+    
+    .item-label {
+      font-size: 0.8rem;
+      color: ${props => props.theme.colors.secondaryText};
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+    }
+    
+    .item-value {
+      font-size: 1rem;
+      color: ${props => props.theme.colors.acidGreen};
+      font-family: ${props => props.theme.typography.fontFamily.mono};
+      font-weight: bold;
+    }
   }
 `;
 
@@ -368,13 +657,17 @@ interface DetectedColumn {
   type: string;
   sample_values: string[];
   confidence: number;
+  quality_score?: number;
+  recommendations?: string[];
 }
 
 interface ColumnMapping {
   required_field: string;
   detected_column: string | null;
   confidence: number;
-  status: 'mapped' | 'unmapped' | 'uncertain';
+  status: 'mapped' | 'unmapped' | 'uncertain' | 'conflict';
+  alternatives?: Array<{ column: string; confidence: number }>;
+  mapping_reason?: string;
 }
 
 interface DataQuality {
@@ -382,6 +675,9 @@ interface DataQuality {
   completeness: number;
   consistency: number;
   validity: number;
+  accuracy?: number;
+  uniqueness?: number;
+  timeliness?: number;
   issues: string[];
   recommendations: string[];
 }
@@ -410,27 +706,63 @@ interface BatchUploadSummary {
   overallProgress: number;
 }
 
+type UploadMode = 'single' | 'batch' | 'streaming';
+
+interface LiveAnalysis {
+  fileSize: number;
+  fileType: string;
+  estimatedRows: number;
+  detectedColumns: number;
+  processingTime: number;
+  dataQualityScore: number;
+}
+
 interface DataUploadProps {
-  authToken: string;
+  authToken?: string; // Make optional since we'll use AuthContext
   onUploadComplete: (result: any) => void;
   onAuthError?: () => void; // Optional callback for authentication errors
 }
 
-export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadComplete, onAuthError }) => {
+export const DataUpload: React.FC<DataUploadProps> = ({ authToken: propAuthToken, onUploadComplete, onAuthError }) => {
+  const { isAuthenticated } = useAuth();
+  const { 
+    uploadWithRetry,
+    uploadFile,
+    serviceHealth, 
+    checkHealth, 
+    fallbackMode, 
+    enableFallbackMode,
+    circuitBreakerStatus 
+  } = useEnhancedApiClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Core upload state
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
+  
+  // Analysis and processing state
   const [detectedColumns, setDetectedColumns] = useState<DetectedColumn[]>([]);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [dataQuality, setDataQuality] = useState<DataQuality | null>(null);
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
   const [filePreview, setFilePreview] = useState<any>(null);
+  
+  // Progress and operation state
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [currentOperation, setCurrentOperation] = useState<string>('');
+  const [processingSpeed, setProcessingSpeed] = useState<number>(0);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number>(0);
+  
+  // Upload mode and batch state
+  const [uploadMode, setUploadMode] = useState<UploadMode>('single');
   const [batchFiles, setBatchFiles] = useState<FileUploadStatus[]>([]);
-  const [batchMode, setBatchMode] = useState<boolean>(false);
   const [batchSummary, setBatchSummary] = useState<BatchUploadSummary | null>(null);
+  
+  // Live analysis state
+  const [liveAnalysis, setLiveAnalysis] = useState<LiveAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleAuthenticationError = useCallback((error: Error) => {
     if (error.message.includes('Authentication failed')) {
@@ -447,6 +779,174 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
       }
     }
   }, [onAuthError]);
+
+  // Fallback parameter detection for when enhanced processing fails
+  const detectFileParametersBasic = async (file: File) => {
+    try {
+      updateProcessingStep('parameter-detection', 'processing', 'Using basic parameter detection...');
+      
+      // Basic file analysis
+      const basicColumns: DetectedColumn[] = [];
+      
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        // For CSV files, try to read first few lines
+        const text = await file.slice(0, 2048).text();
+        const lines = text.split('\n');
+        const headers = lines[0]?.split(',') || [];
+        
+        headers.forEach((header, index) => {
+          const cleanHeader = header.trim().replace(/['"]/g, '');
+          let type = 'categorical';
+          let confidence = 0.5;
+          
+          // Basic type detection based on header names
+          const headerLower = cleanHeader.toLowerCase();
+          if (headerLower.includes('date') || headerLower.includes('time')) {
+            type = 'date';
+            confidence = 0.7;
+          } else if (headerLower.includes('amount') || headerLower.includes('sales') || headerLower.includes('revenue')) {
+            type = 'sales_amount';
+            confidence = 0.7;
+          } else if (headerLower.includes('product') || headerLower.includes('category')) {
+            type = 'product_category';
+            confidence = 0.7;
+          } else if (headerLower.includes('region') || headerLower.includes('location')) {
+            type = 'region';
+            confidence = 0.7;
+          }
+          
+          basicColumns.push({
+            name: cleanHeader,
+            type,
+            sample_values: [`Sample ${index + 1}`, `Sample ${index + 2}`],
+            confidence,
+            quality_score: 0.7,
+            recommendations: ['Basic analysis - consider using enhanced mode for detailed insights']
+          });
+        });
+      } else {
+        // For other file types, create generic columns
+        basicColumns.push({
+          name: 'data',
+          type: 'unknown',
+          sample_values: ['Data preview not available in basic mode'],
+          confidence: 0.3,
+          quality_score: 0.5,
+          recommendations: ['Upload as CSV for better analysis']
+        });
+      }
+      
+      setDetectedColumns(basicColumns);
+      
+      // Basic column mapping
+      const basicMappings = autoMapColumns(basicColumns);
+      setColumnMappings(basicMappings);
+      
+      // Basic data quality
+      const basicQuality = assessDataQuality(basicColumns, { basic: true });
+      setDataQuality(basicQuality);
+      
+      // Basic preview
+      setFilePreview({
+        type: file.name.split('.').pop()?.toUpperCase() || 'Unknown',
+        basic_mode: true,
+        message: 'Basic analysis mode - limited functionality'
+      });
+      
+      updateProcessingStep('parameter-detection', 'completed');
+      updateProcessingStep('column-mapping', 'completed');
+      updateProcessingStep('data-quality', 'completed');
+      
+      return {
+        success: true,
+        fallback_mode: true,
+        detected_columns: basicColumns,
+        column_mappings: basicMappings,
+        data_quality: basicQuality
+      };
+      
+    } catch (error) {
+      logger.error('Basic parameter detection failed:', error);
+      throw new Error('Both enhanced and basic parameter detection failed');
+    }
+  };
+
+  // Live file analysis on selection
+  const performLiveAnalysis = useCallback(async (file: File) => {
+    setIsAnalyzing(true);
+    const startTime = Date.now();
+    
+    try {
+      // Immediate analysis based on file properties
+      const analysis: LiveAnalysis = {
+        fileSize: file.size,
+        fileType: file.type || file.name.split('.').pop()?.toUpperCase() || 'Unknown',
+        estimatedRows: Math.floor(file.size / 100), // Rough estimate
+        detectedColumns: 0,
+        processingTime: 0,
+        dataQualityScore: 0.8 // Initial estimate
+      };
+      
+      setLiveAnalysis(analysis);
+      
+      // For CSV/Excel files, try to read first few lines for better analysis
+      if (file.type.includes('csv') || file.name.endsWith('.csv')) {
+        const text = await file.slice(0, 1024).text(); // Read first 1KB
+        const lines = text.split('\n');
+        const firstLine = lines[0];
+        
+        if (firstLine) {
+          const columns = firstLine.split(',').length;
+          const estimatedRows = Math.floor(file.size / firstLine.length);
+          
+          setLiveAnalysis(prev => prev ? {
+            ...prev,
+            detectedColumns: columns,
+            estimatedRows: estimatedRows,
+            processingTime: Date.now() - startTime
+          } : null);
+        }
+      }
+      
+      // Update processing time
+      setTimeout(() => {
+        setLiveAnalysis(prev => prev ? {
+          ...prev,
+          processingTime: Date.now() - startTime
+        } : null);
+      }, 100);
+      
+    } catch (error) {
+      console.warn('Live analysis failed:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, []);
+
+  // Progress tracking state
+  const progressTrackingRef = useRef({ lastUpdate: Date.now(), lastProgress: 0 });
+
+  // Update progress with speed calculation
+  const updateProgressWithSpeed = useCallback((progress: number, operation: string) => {
+    const now = Date.now();
+    const { lastUpdate, lastProgress } = progressTrackingRef.current;
+    
+    if (now - lastUpdate > 0) {
+      const speed = (progress - lastProgress) / (now - lastUpdate) * 1000; // progress per second
+      setProcessingSpeed(Math.max(0, speed));
+      
+      if (speed > 0) {
+        const remaining = (100 - progress) / speed;
+        setEstimatedTimeRemaining(Math.max(0, remaining));
+      }
+    }
+    
+    setUploadProgress(progress);
+    setCurrentOperation(operation);
+    
+    // Update tracking state
+    progressTrackingRef.current = { lastUpdate: now, lastProgress: progress };
+  }, []);
 
   const requiredFields = [
     'date',
@@ -475,10 +975,7 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
 
   const detectFileParameters = async (file: File) => {
     try {
-      // Validate authentication token
-      if (!authToken) {
-        throw new Error('Authentication required. Please log in again.');
-      }
+      // Authentication is handled by the API client
       
       updateProcessingStep('file-validation', 'processing');
       
@@ -499,110 +996,102 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
 
       updateProcessingStep('file-validation', 'completed');
       
-      // Determine file type for different processing workflows
-      const fileExtension = file.name.toLowerCase().split('.').pop();
-      const isPDF = fileExtension === 'pdf';
+      // Use enhanced data processing API with bulletproof error handling
+      updateProcessingStep('parameter-detection', 'processing', 'Analyzing file with smart processor...');
       
-      if (isPDF) {
-        // PDF processing workflow
-        updateProcessingStep('parameter-detection', 'processing', 'Extracting PDF content...');
-        
-        const formData = new FormData();
-        formData.append('file', file);
+      // Use enhanced data processing API with bulletproof error handling
+      updateProcessingStep('parameter-detection', 'processing', 'Analyzing file with smart processor...');
+      
+      // Use enhanced upload with retry logic
+      const response = await uploadWithRetry<any>('/api/v1/data-processing/analyze-file', file, {
+        maxRetries: 3,
+        onProgress: (progress) => {
+          updateProgressWithSpeed(progress.percentage * 0.6, 'Analyzing file structure...');
+        },
+        onRetry: (attempt, error) => {
+          updateProcessingStep('parameter-detection', 'processing', 
+            `Retrying analysis (attempt ${attempt}/3)... ${error.category}`);
+        },
+        onFallback: () => {
+          updateProcessingStep('parameter-detection', 'processing', 
+            'Using fallback analysis mode...');
+        }
+      });
 
-        const response = await fetch('http://localhost:8000/api/v1/pdf/extract-preview', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: formData,
-        });
-
-        if (response.status === 401) {
-          throw new Error('Authentication failed. Please log in again.');
+      if (!response.success) {
+        // Handle specific error types
+        if (response.errorDetails) {
+          const { category, recoveryActions } = response.errorDetails;
+          
+          if (category === 'service_unavailable' && recoveryActions.includes('fallback_mode')) {
+            updateProcessingStep('parameter-detection', 'processing', 
+              'Service temporarily unavailable, enabling fallback mode...');
+            enableFallbackMode();
+            
+            // Try basic parameter detection as fallback
+            return await detectFileParametersBasic(file);
+          }
         }
         
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Failed to extract PDF content');
-        }
-
-        const result = await response.json();
-        
-        // Set PDF-specific preview data
-        setFilePreview({
-          type: 'pdf',
-          pageCount: result.page_count || 0,
-          textLength: result.text_length || 0,
-          extractedText: result.preview_text || '',
-          metadata: result.metadata || {}
-        });
-        
-        // PDF files don't have columns, so skip column mapping
-        setDetectedColumns([]);
-        setColumnMappings([]);
-        
-        updateProcessingStep('parameter-detection', 'completed');
-        updateProcessingStep('column-mapping', 'completed', 'Skipped for PDF files');
-        updateProcessingStep('data-quality', 'processing');
-
-        // Assess PDF quality
-        const quality = assessPDFQuality(result);
-        setDataQuality(quality);
-        
-        updateProcessingStep('data-quality', 'completed');
-
-        return result;
-      } else {
-        // CSV/Excel processing workflow (existing logic)
-        updateProcessingStep('parameter-detection', 'processing');
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('http://localhost:8000/api/company-sales/detect-parameters', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: formData,
-        });
-
-        if (response.status === 401) {
-          throw new Error('Authentication failed. Please log in again.');
-        }
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.detail || 'Failed to detect file parameters');
-        }
-
-        const result = await response.json();
-        
-        setDetectedColumns(result.detected_columns || []);
-        setFilePreview({
-          type: 'csv',
-          ...result.preview
-        });
-        
-        updateProcessingStep('parameter-detection', 'completed');
-        updateProcessingStep('column-mapping', 'processing');
-
-        // Auto-map columns
-        const mappings = autoMapColumns(result.detected_columns || []);
-        setColumnMappings(mappings);
-        
-        updateProcessingStep('column-mapping', 'completed');
-        updateProcessingStep('data-quality', 'processing');
-
-        // Assess data quality
-        const quality = assessDataQuality(result.detected_columns || [], result.preview || {});
-        setDataQuality(quality);
-        
-        updateProcessingStep('data-quality', 'completed');
-
-        return result;
+        throw new Error(response.error || 'Failed to analyze file');
       }
+
+      const result = response.data;
+      
+      // Set enhanced detected columns with quality scores
+      const enhancedColumns = result.detected_columns.map((col: any) => ({
+        name: col.name,
+        type: col.type,
+        sample_values: col.sample_values,
+        confidence: col.confidence,
+        quality_score: col.quality_score,
+        recommendations: col.recommendations
+      }));
+      
+      setDetectedColumns(enhancedColumns);
+      
+      // Set enhanced preview data
+      setFilePreview({
+        type: result.file_info.format,
+        ...result.preview_data
+      });
+      
+      updateProcessingStep('parameter-detection', 'completed');
+      updateProcessingStep('column-mapping', 'processing', 'Auto-mapping columns...');
+
+      // Use enhanced auto-mapping results
+      const enhancedMappings = result.column_mappings.map((mapping: any) => ({
+        required_field: mapping.required_field,
+        detected_column: mapping.detected_column,
+        confidence: mapping.confidence,
+        status: mapping.status,
+        alternatives: mapping.alternatives,
+        mapping_reason: mapping.mapping_reason
+      }));
+      
+      setColumnMappings(enhancedMappings);
+      
+      updateProcessingStep('column-mapping', 'completed');
+      updateProcessingStep('data-quality', 'processing', 'Assessing data quality...');
+
+      // Use comprehensive data quality assessment
+      const enhancedQuality = {
+        overall_score: result.data_quality.overall_score,
+        completeness: result.data_quality.completeness,
+        consistency: result.data_quality.consistency,
+        validity: result.data_quality.validity,
+        accuracy: result.data_quality.accuracy,
+        uniqueness: result.data_quality.uniqueness,
+        timeliness: result.data_quality.timeliness,
+        issues: result.data_quality.issues,
+        recommendations: result.data_quality.recommendations
+      };
+      
+      setDataQuality(enhancedQuality);
+      
+      updateProcessingStep('data-quality', 'completed');
+
+      return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Parameter detection failed';
       updateProcessingStep('parameter-detection', 'error', errorMessage);
@@ -617,6 +1106,8 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
   };
 
   const autoMapColumns = (columns: DetectedColumn[]): ColumnMapping[] => {
+    // This function is now primarily used as a fallback
+    // The enhanced API provides intelligent auto-mapping
     return requiredFields.map(field => {
       // Find best matching column
       const matches = columns.filter(col => {
@@ -647,17 +1138,19 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
   };
 
   const assessDataQuality = (columns: DetectedColumn[], preview: any): DataQuality => {
+    // This function is now primarily used as a fallback
+    // The enhanced API provides comprehensive quality assessment
     let completeness = 0;
     let consistency = 0;
     let validity = 0;
     const issues: string[] = [];
     const recommendations: string[] = [];
 
-    // Basic quality assessment
+    // Basic quality assessment for backward compatibility
     if (columns.length > 0) {
       completeness = Math.min(columns.length / requiredFields.length, 1);
       consistency = columns.reduce((acc, col) => acc + col.confidence, 0) / columns.length;
-      validity = 0.8; // Placeholder - would need actual data validation
+      validity = 0.8; // Placeholder - enhanced API provides actual validation
     }
 
     const overall_score = (completeness + consistency + validity) / 3;
@@ -728,8 +1221,8 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
   };
 
   const handleFileUpload = async (file: File) => {
-    // Validate authentication token
-    if (!authToken) {
+    // Authentication is handled by the API client
+    if (!isAuthenticated) {
       alert('Authentication required. Please log in again.');
       return;
     }
@@ -742,15 +1235,13 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
     initializeProcessingSteps();
 
     try {
-      // Progress tracking for parameter detection
-      setUploadProgress(10);
-      setCurrentOperation('Analyzing file structure...');
+      // Enhanced progress tracking for parameter detection
+      updateProgressWithSpeed(10, 'Analyzing file structure...');
       
       // First detect parameters
       await detectFileParameters(file);
       
-      setUploadProgress(50);
-      setCurrentOperation('Uploading file to server...');
+      updateProgressWithSpeed(50, 'Uploading file to server...');
 
       // Then upload with enhanced processing
       const fileExtension = file.name.toLowerCase().split('.').pop();
@@ -759,30 +1250,49 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
       updateProcessingStep('ensemble-init', 'processing', 
         isPDF ? 'Processing PDF document...' : 'Initializing ensemble models...');
       
-      setCurrentOperation(isPDF ? 'Processing PDF document...' : 'Training ensemble models...');
-      setUploadProgress(70);
+      updateProgressWithSpeed(70, isPDF ? 'Processing PDF document...' : 'Training ensemble models...');
       
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Use the enhanced upload endpoint that handles both CSV and PDF
-      const response = await fetch('http://localhost:8000/api/v1/upload-enhanced', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
+      // Use the enhanced upload with retry logic for bulletproof reliability
+      const response = await uploadWithRetry<any>('/api/v1/upload-enhanced', file, {
+        maxRetries: 3,
+        onProgress: (progress) => {
+          updateProgressWithSpeed(70 + (progress.percentage * 0.2), 
+            isPDF ? 'Processing PDF document...' : 'Training ensemble models...');
         },
-        body: formData,
+        onRetry: (attempt, error) => {
+          updateProcessingStep('ensemble-init', 'processing', 
+            `Retrying upload (attempt ${attempt}/3)... ${error.category}`);
+          setCurrentOperation(`Retrying upload (attempt ${attempt}/3)...`);
+        },
+        onFallback: () => {
+          updateProcessingStep('ensemble-init', 'processing', 
+            'Using fallback upload mode...');
+          setCurrentOperation('Using fallback upload mode...');
+          enableFallbackMode();
+        }
       });
 
-      if (response.status === 401) {
-        throw new Error('Authentication failed. Please log in again.');
+      if (!response.success) {
+        // Enhanced error handling with specific recovery actions
+        if (response.errorDetails) {
+          const { category, recoveryActions } = response.errorDetails;
+          
+          if (category === 'network' && recoveryActions.includes('retry')) {
+            throw new Error('Network connection failed. Please check your internet connection and try again.');
+          } else if (category === 'service_unavailable' && recoveryActions.includes('fallback_mode')) {
+            throw new Error('Service temporarily unavailable. Fallback mode activated.');
+          } else if (category === 'authentication' && recoveryActions.includes('redirect_login')) {
+            throw new Error('Authentication failed. Please log in again.');
+          }
+        }
+        
+        throw new Error(response.error || 'Upload failed due to network issues. Please check your connection and try again.');
       }
 
-      const result = await response.json();
+      const result = response.data;
       setUploadResult(result);
       
-      setUploadProgress(90);
-      setCurrentOperation('Finalizing processing...');
+      updateProgressWithSpeed(90, 'Finalizing processing...');
       
       if (result.success) {
         updateProcessingStep('ensemble-init', 'completed');
@@ -797,13 +1307,12 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
           // Simulate pattern detection completion for CSV files
           setTimeout(() => {
             updateProcessingStep('pattern-detection', 'completed');
-            setCurrentOperation('Pattern detection completed');
-            setUploadProgress(100);
+            updateProgressWithSpeed(100, 'Pattern detection completed');
           }, 1000);
         }
         
         if (isPDF) {
-          setUploadProgress(100);
+          updateProgressWithSpeed(100, 'PDF processing completed');
         }
         
         onUploadComplete(result);
@@ -832,24 +1341,68 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
     
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      if (files.length === 1) {
-        handleFileUpload(files[0]);
-      } else {
+      if (uploadMode === 'single' && files.length === 1) {
+        setSelectedFile(files[0]);
+        performLiveAnalysis(files[0]);
+      } else if (uploadMode === 'batch' || files.length > 1) {
+        setUploadMode('batch');
         handleBatchFileSelection(files);
+      } else if (uploadMode === 'streaming') {
+        // For streaming mode, process files one by one
+        handleStreamingUpload(files);
       }
     }
-  }, []);
+  }, [uploadMode, performLiveAnalysis]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const fileArray = Array.from(files);
-      if (fileArray.length === 1) {
-        handleFileUpload(fileArray[0]);
-      } else {
+      
+      if (uploadMode === 'single' && fileArray.length === 1) {
+        setSelectedFile(fileArray[0]);
+        performLiveAnalysis(fileArray[0]);
+      } else if (uploadMode === 'batch' || fileArray.length > 1) {
+        setUploadMode('batch');
         handleBatchFileSelection(fileArray);
+      } else if (uploadMode === 'streaming') {
+        handleStreamingUpload(fileArray);
       }
     }
+  }, [uploadMode, performLiveAnalysis]);
+
+  const handleStreamingUpload = useCallback(async (files: File[]) => {
+    setUploading(true);
+    let processedCount = 0;
+    
+    for (const file of files) {
+      try {
+        updateProgressWithSpeed((processedCount / files.length) * 100, `Streaming upload: ${file.name}`);
+        await handleFileUpload(file);
+        processedCount++;
+      } catch (error) {
+        console.error(`Streaming upload failed for ${file.name}:`, error);
+      }
+    }
+    
+    updateProgressWithSpeed(100, 'Streaming upload completed');
+    setUploading(false);
+  }, [updateProgressWithSpeed]);
+
+  const updateBatchSummary = useCallback((files: FileUploadStatus[]) => {
+    const totalFiles = files.length;
+    const completedFiles = files.filter(f => f.status === 'completed').length;
+    const failedFiles = files.filter(f => f.status === 'failed').length;
+    const processingFiles = files.filter(f => f.status === 'uploading' || f.status === 'retrying').length;
+    const overallProgress = totalFiles > 0 ? (completedFiles / totalFiles) * 100 : 0;
+
+    setBatchSummary({
+      totalFiles,
+      completedFiles,
+      failedFiles,
+      processingFiles,
+      overallProgress
+    });
   }, []);
 
   const handleBatchFileSelection = useCallback((files: File[]) => {
@@ -881,7 +1434,6 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
     }
 
     if (validFiles.length > 0) {
-      setBatchMode(true);
       const batchFileStatuses: FileUploadStatus[] = validFiles.map(file => ({
         file,
         status: 'pending',
@@ -891,8 +1443,15 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
       
       setBatchFiles(batchFileStatuses);
       updateBatchSummary(batchFileStatuses);
+      
+      // Perform live analysis on the first file as a preview
+      if (validFiles.length > 0) {
+        performLiveAnalysis(validFiles[0]);
+      }
     }
-  }, [updateBatchSummary]);
+  }, [updateBatchSummary, performLiveAnalysis]);
+
+
 
   const resetUpload = () => {
     setSelectedFile(null);
@@ -904,26 +1463,18 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
     setFilePreview(null);
     setUploadProgress(0);
     setCurrentOperation('');
+    setProcessingSpeed(0);
+    setEstimatedTimeRemaining(0);
     setBatchFiles([]);
-    setBatchMode(false);
     setBatchSummary(null);
+    setLiveAnalysis(null);
+    setIsAnalyzing(false);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
-
-  const updateBatchSummary = useCallback((files: FileUploadStatus[]) => {
-    const totalFiles = files.length;
-    const completedFiles = files.filter(f => f.status === 'completed').length;
-    const failedFiles = files.filter(f => f.status === 'failed').length;
-    const processingFiles = files.filter(f => f.status === 'uploading' || f.status === 'retrying').length;
-    const overallProgress = totalFiles > 0 ? (completedFiles / totalFiles) * 100 : 0;
-
-    setBatchSummary({
-      totalFiles,
-      completedFiles,
-      failedFiles,
-      processingFiles,
-      overallProgress
-    });
-  }, []);
 
   const updateFileStatus = useCallback((fileIndex: number, updates: Partial<FileUploadStatus>) => {
     setBatchFiles(prev => {
@@ -962,25 +1513,44 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
       updateFileStatus(fileIndex, { progress: 20 });
       await detectFileParameters(file);
 
-      // Upload file
+      // Upload file with enhanced retry logic
       updateFileStatus(fileIndex, { progress: 50 });
       
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('http://localhost:8000/api/v1/upload-enhanced', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
+      const response = await uploadWithRetry<any>('/api/v1/upload-enhanced', file, {
+        maxRetries: 3,
+        onProgress: (progress) => {
+          updateFileStatus(fileIndex, { progress: 50 + (progress.percentage * 0.5) });
         },
-        body: formData,
+        onRetry: (attempt, error) => {
+          updateFileStatus(fileIndex, { 
+            status: 'retrying',
+            retryCount: attempt 
+          });
+        },
+        onFallback: () => {
+          // Enable fallback mode for this file
+          enableFallbackMode();
+        }
       });
 
-      if (response.status === 401) {
-        throw new Error('Authentication failed. Please log in again.');
+      if (!response.success) {
+        // Enhanced error handling for batch uploads
+        if (response.errorDetails) {
+          const { category } = response.errorDetails;
+          
+          if (category === 'network') {
+            throw new Error('Network connection failed. Please check your internet connection.');
+          } else if (category === 'service_unavailable') {
+            throw new Error('Service temporarily unavailable. Please try again later.');
+          } else if (category === 'authentication') {
+            throw new Error('Authentication failed. Please log in again.');
+          }
+        }
+        
+        throw new Error(response.error || 'Upload failed due to network issues.');
       }
 
-      const result = await response.json();
+      const result = response.data;
       
       updateFileStatus(fileIndex, { progress: 100 });
 
@@ -1017,8 +1587,8 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
   };
 
   const processBatchUpload = async () => {
-    // Validate authentication token
-    if (!authToken) {
+    // Authentication is handled by the API client
+    if (!isAuthenticated) {
       alert('Authentication required. Please log in again.');
       return;
     }
@@ -1054,49 +1624,102 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
   };
 
   return (
-    <UploadContainer variant="neon">
+    <UploadContainer $variant="neon">
       <motion.h3 
         style={{ color: '#00d4ff', marginBottom: '1rem', fontFamily: 'monospace' }}
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
       >
-        🤖 Enhanced Ensemble Data Upload
+        🚀 Hot Live Upload Interface
       </motion.h3>
+      
+      {/* Upload Mode Selector */}
+      <UploadModeSelector
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <ModeButton
+          isActive={uploadMode === 'single'}
+          onClick={() => setUploadMode('single')}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          ⚡ Single
+        </ModeButton>
+        <ModeButton
+          isActive={uploadMode === 'batch'}
+          onClick={() => setUploadMode('batch')}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          📦 Batch
+        </ModeButton>
+        <ModeButton
+          isActive={uploadMode === 'streaming'}
+          onClick={() => setUploadMode('streaming')}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          🌊 Streaming
+        </ModeButton>
+      </UploadModeSelector>
       
       <DropZone
         isDragOver={isDragOver}
-        hasFile={!!selectedFile || batchMode}
+        hasFile={!!selectedFile || uploadMode === 'batch'}
+        isProcessing={uploading || isAnalyzing}
         onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => !uploading && document.getElementById('file-input')?.click()}
+        onClick={() => !uploading && fileInputRef.current?.click()}
       >
         {uploading ? (
           <div>
             <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚡</div>
-            <div>Processing ensemble initialization...</div>
+            <div>Processing live upload...</div>
             <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
-              Detecting patterns and training models
+              {currentOperation || 'Initializing hot processing pipeline...'}
+            </div>
+            {processingSpeed > 0 && (
+              <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '0.25rem' }}>
+                Speed: {processingSpeed.toFixed(1)}%/s • ETA: {estimatedTimeRemaining.toFixed(0)}s
+              </div>
+            )}
+          </div>
+        ) : isAnalyzing ? (
+          <div>
+            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🔍</div>
+            <div>Live analysis in progress...</div>
+            <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
+              Scanning file structure and detecting patterns
             </div>
           </div>
-        ) : selectedFile && !batchMode ? (
+        ) : selectedFile && uploadMode === 'single' ? (
           <div>
             <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>✅</div>
             <div>{selectedFile.name}</div>
             <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>
               {(selectedFile.size / 1024 / 1024).toFixed(2)} MB • Ready for ensemble processing
             </div>
-            <div style={{ marginTop: '1rem' }}>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
               <CyberpunkButton 
-                variant="ghost" 
-                size="sm" 
+                $variant="primary" 
+                $size="sm" 
+                onClick={() => selectedFile && handleFileUpload(selectedFile)}
+                disabled={uploading}
+              >
+                🚀 Start Upload
+              </CyberpunkButton>
+              <CyberpunkButton 
+                $variant="ghost" 
+                $size="sm" 
                 onClick={() => resetUpload()}
               >
-                Choose Different File
+                Clear
               </CyberpunkButton>
             </div>
           </div>
-        ) : batchMode ? (
+        ) : uploadMode === 'batch' && batchFiles.length > 0 ? (
           <div>
             <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📦</div>
             <div>{batchFiles.length} files selected for batch upload</div>
@@ -1105,8 +1728,8 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
             </div>
             <div style={{ marginTop: '1rem' }}>
               <CyberpunkButton 
-                variant="ghost" 
-                size="sm" 
+                $variant="ghost" 
+                $size="sm" 
                 onClick={() => resetUpload()}
               >
                 Clear Selection
@@ -1115,22 +1738,72 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
           </div>
         ) : (
           <div>
-            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📊</div>
-            <div>Drop your CSV/Excel/PDF files here or click to browse</div>
+            <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>
+              {uploadMode === 'single' && '⚡'}
+              {uploadMode === 'batch' && '📦'}
+              {uploadMode === 'streaming' && '🌊'}
+            </div>
+            <div>
+              {uploadMode === 'single' && 'Drop a single file for instant processing'}
+              {uploadMode === 'batch' && 'Drop multiple files for batch processing'}
+              {uploadMode === 'streaming' && 'Drop files for real-time streaming upload'}
+            </div>
             <div style={{ fontSize: '0.9rem', opacity: 0.7, marginTop: '0.5rem' }}>
-              Supported: .csv, .xlsx, .xls, .pdf • Single or multiple files • Auto-detects parameters and processes documents
+              Supported: .csv, .xlsx, .xls, .pdf • Live analysis • Hot-swappable modes
             </div>
           </div>
         )}
       </DropZone>
 
       <FileInput
-        id="file-input"
+        ref={fileInputRef}
         type="file"
         accept=".csv,.xlsx,.xls,.pdf"
-        multiple
+        multiple={uploadMode !== 'single'}
         onChange={handleFileSelect}
       />
+
+      {/* Live Analysis Panel */}
+      <AnimatePresence>
+        {liveAnalysis && (
+          <LiveAnalysisPanel
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <div className="analysis-header">
+              <span>🔍 Live Analysis</span>
+              {isAnalyzing && <span style={{ fontSize: '0.8rem' }}>Analyzing...</span>}
+            </div>
+            <div className="analysis-grid">
+              <div className="analysis-item">
+                <div className="item-label">File Size</div>
+                <div className="item-value">{(liveAnalysis.fileSize / 1024 / 1024).toFixed(2)} MB</div>
+              </div>
+              <div className="analysis-item">
+                <div className="item-label">File Type</div>
+                <div className="item-value">{liveAnalysis.fileType}</div>
+              </div>
+              <div className="analysis-item">
+                <div className="item-label">Est. Rows</div>
+                <div className="item-value">{liveAnalysis.estimatedRows.toLocaleString()}</div>
+              </div>
+              <div className="analysis-item">
+                <div className="item-label">Columns</div>
+                <div className="item-value">{liveAnalysis.detectedColumns || 'Detecting...'}</div>
+              </div>
+              <div className="analysis-item">
+                <div className="item-label">Quality Score</div>
+                <div className="item-value">{(liveAnalysis.dataQualityScore * 100).toFixed(0)}%</div>
+              </div>
+              <div className="analysis-item">
+                <div className="item-label">Analysis Time</div>
+                <div className="item-value">{liveAnalysis.processingTime}ms</div>
+              </div>
+            </div>
+          </LiveAnalysisPanel>
+        )}
+      </AnimatePresence>
 
       {/* Upload Progress */}
       <AnimatePresence>
@@ -1141,8 +1814,8 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
             exit={{ opacity: 0, height: 0 }}
           >
             <div className="progress-header">
-              <span>⚡ Upload Progress</span>
-              <span>{uploadProgress}%</span>
+              <span>⚡ Live Processing</span>
+              <span>{uploadProgress.toFixed(1)}%</span>
             </div>
             <div className="progress-track">
               <div 
@@ -1155,6 +1828,11 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
                 {currentOperation}
               </div>
             )}
+            <div className="progress-stats">
+              <span>Speed: {processingSpeed.toFixed(1)}%/s</span>
+              <span>ETA: {estimatedTimeRemaining > 0 ? `${estimatedTimeRemaining.toFixed(0)}s` : '--'}</span>
+              <span>Mode: {uploadMode.toUpperCase()}</span>
+            </div>
           </ProgressBar>
         )}
       </AnimatePresence>
@@ -1239,17 +1917,31 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <h4 style={{ color: '#ff1493', marginBottom: '1rem' }}>🎯 Column Mapping</h4>
+            <h4 style={{ color: '#ff1493', marginBottom: '1rem' }}>🎯 Smart Column Mapping</h4>
             {columnMappings.map((mapping, idx) => (
               <ColumnMappingRow key={idx}>
                 <div className="required-field">{mapping.required_field}</div>
                 <div className="detected-column">
                   {mapping.detected_column || 'Not detected'}
+                  {mapping.confidence && (
+                    <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.25rem' }}>
+                      Confidence: {(mapping.confidence * 100).toFixed(0)}%
+                      {mapping.mapping_reason && (
+                        <span style={{ marginLeft: '0.5rem' }}>• {mapping.mapping_reason}</span>
+                      )}
+                    </div>
+                  )}
+                  {mapping.alternatives && mapping.alternatives.length > 0 && (
+                    <div style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '0.25rem' }}>
+                      Alternatives: {mapping.alternatives.map(alt => `${alt.column} (${(alt.confidence * 100).toFixed(0)}%)`).join(', ')}
+                    </div>
+                  )}
                 </div>
                 <div className="mapping-status">
                   {mapping.status === 'mapped' && '✅'}
                   {mapping.status === 'uncertain' && '⚠️'}
                   {mapping.status === 'unmapped' && '❌'}
+                  {mapping.status === 'conflict' && '🔄'}
                 </div>
               </ColumnMappingRow>
             ))}
@@ -1257,7 +1949,7 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
         )}
       </AnimatePresence>
 
-      {/* Data Quality Assessment */}
+      {/* Enhanced Data Quality Assessment */}
       <AnimatePresence>
         {dataQuality && (
           <DataQualityIndicator
@@ -1266,20 +1958,63 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
           >
-            <h4 style={{ marginBottom: '0.5rem' }}>
-              📊 Data Quality Score: {(dataQuality.overall_score * 100).toFixed(1)}%
-            </h4>
+            <div className="quality-header">
+              <div className="quality-title">📊 Data Quality Assessment</div>
+              <div className="quality-score">{(dataQuality.overall_score * 100).toFixed(1)}%</div>
+            </div>
+            
+            <div className="quality-breakdown">
+              <div className="quality-metric">
+                <div className="metric-label">Completeness</div>
+                <div className="metric-value">{(dataQuality.completeness * 100).toFixed(0)}%</div>
+              </div>
+              <div className="quality-metric">
+                <div className="metric-label">Consistency</div>
+                <div className="metric-value">{(dataQuality.consistency * 100).toFixed(0)}%</div>
+              </div>
+              <div className="quality-metric">
+                <div className="metric-label">Validity</div>
+                <div className="metric-value">{(dataQuality.validity * 100).toFixed(0)}%</div>
+              </div>
+              {dataQuality.accuracy !== undefined && (
+                <div className="quality-metric">
+                  <div className="metric-label">Accuracy</div>
+                  <div className="metric-value">{(dataQuality.accuracy * 100).toFixed(0)}%</div>
+                </div>
+              )}
+              {dataQuality.uniqueness !== undefined && (
+                <div className="quality-metric">
+                  <div className="metric-label">Uniqueness</div>
+                  <div className="metric-value">{(dataQuality.uniqueness * 100).toFixed(0)}%</div>
+                </div>
+              )}
+              {dataQuality.timeliness !== undefined && (
+                <div className="quality-metric">
+                  <div className="metric-label">Timeliness</div>
+                  <div className="metric-value">{(dataQuality.timeliness * 100).toFixed(0)}%</div>
+                </div>
+              )}
+            </div>
+            
             <div className="quality-bar">
               <div className="quality-fill" />
             </div>
-            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
-              Completeness: {(dataQuality.completeness * 100).toFixed(0)}% • 
-              Consistency: {(dataQuality.consistency * 100).toFixed(0)}% • 
-              Validity: {(dataQuality.validity * 100).toFixed(0)}%
-            </div>
-            {dataQuality.issues.length > 0 && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#ff6b6b' }}>
-                Issues: {dataQuality.issues.join(', ')}
+            
+            {dataQuality.issues && dataQuality.issues.length > 0 && (
+              <div className="quality-issues">
+                <div className="issues-title">Issues Detected</div>
+                {dataQuality.issues.map((issue, index) => (
+                  <div key={index} className="issue-item">{issue}</div>
+                ))}
+              </div>
+            )}
+            
+            {dataQuality.recommendations && dataQuality.recommendations.length > 0 && (
+              <div className="quality-recommendations">
+                <div className="recommendations-title">Recommendations</div>
+                {dataQuality.recommendations.map((rec, index) => (
+                  <div key={index} className="recommendation-item">{rec}</div>
+                ))}
               </div>
             )}
           </DataQualityIndicator>
@@ -1288,7 +2023,7 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
 
       {/* Batch Upload Interface */}
       <AnimatePresence>
-        {batchMode && batchFiles.length > 0 && (
+        {uploadMode === 'batch' && batchFiles.length > 0 && (
           <BatchUploadContainer
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -1298,17 +2033,17 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
               <h4>📦 Batch Upload ({batchFiles.length} files)</h4>
               <div className="batch-controls">
                 <CyberpunkButton 
-                  variant="primary" 
-                  size="sm"
+                  $variant="primary" 
+                  $size="sm"
                   onClick={processBatchUpload}
                   disabled={uploading || batchFiles.every(f => f.status === 'completed')}
                 >
                   {uploading ? 'Processing...' : 'Start Batch Upload'}
                 </CyberpunkButton>
                 <CyberpunkButton 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setBatchMode(false)}
+                  $variant="ghost" 
+                  $size="sm"
+                  onClick={() => resetUpload()}
                   disabled={uploading}
                 >
                   Cancel
@@ -1377,8 +2112,8 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
                     </div>
                     {fileStatus.status === 'failed' && fileStatus.retryCount < 3 && (
                       <CyberpunkButton 
-                        variant="ghost" 
-                        size="xs"
+                        $variant="ghost" 
+                        $size="sm"
                         onClick={() => retryFailedFile(index)}
                         disabled={uploading}
                       >
@@ -1395,7 +2130,7 @@ export const DataUpload: React.FC<DataUploadProps> = ({ authToken, onUploadCompl
 
       {/* Upload Result */}
       <AnimatePresence>
-        {uploadResult && !batchMode && (
+        {uploadResult && uploadMode === 'single' && (
           <UploadStatus 
             success={uploadResult.success}
             initial={{ opacity: 0, y: 20 }}

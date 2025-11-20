@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CyberpunkCard, CyberpunkButton } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
 
 // Animation keyframes
 const scanLine = keyframes`
@@ -561,14 +563,14 @@ interface FallbackStrategy {
 }
 
 interface PerformanceMonitoringDashboardProps {
-  authToken: string;
   companyId?: string;
 }
 
 export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardProps> = ({ 
-  authToken, 
   companyId 
 }) => {
+  const { authToken, isAuthenticated } = useAuth();
+  const { get, post } = useApiClient();
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [modelRankings, setModelRankings] = useState<ModelRanking[]>([]);
   const [alerts, setAlerts] = useState<PerformanceAlert[]>([]);
@@ -579,40 +581,52 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  // Handle missing authentication
+  if (!isAuthenticated) {
+    return (
+      <DashboardContainer $variant="glass" $padding="lg">
+        <div style={{ textAlign: 'center', color: '#ff0040' }}>
+          Authentication required to access performance monitoring
+        </div>
+      </DashboardContainer>
+    );
+  }
+
   // Fetch system health data
   const fetchSystemHealth = useCallback(async () => {
+    if (!isAuthenticated || !authToken) {
+      console.error('Authentication required for system health data');
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:8000/api/model-performance/system-health', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+      const response = await get('http://localhost:8000/api/model-performance/system-health');
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (response.success && response.data) {
+        setSystemHealth((response.data as any).system_health);
+      } else {
+        throw new Error('Failed to fetch system health data');
       }
-
-      const data = await response.json();
-      setSystemHealth(data.system_health);
     } catch (err) {
       console.error('Failed to fetch system health:', err);
     }
-  }, [authToken]);
+  }, [isAuthenticated, authToken, get]);
 
   // Fetch model rankings
   const fetchModelRankings = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:8000/api/model-performance/models', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+    if (!isAuthenticated || !authToken) {
+      console.error('Authentication required for model rankings data');
+      return;
+    }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    try {
+      const response = await get('http://localhost:8000/api/model-performance/models');
+
+      if (!response.success || !response.data) {
+        throw new Error('Failed to fetch model rankings data');
       }
 
-      const data = await response.json();
+      const data = response.data as any;
       
       // Convert to ranking format and sort by health score
       const rankings: ModelRanking[] = Object.entries(data.models).map(([name, metrics]: [string, any]) => ({
@@ -635,22 +649,23 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
     } catch (err) {
       console.error('Failed to fetch model rankings:', err);
     }
-  }, [authToken]);
+  }, [isAuthenticated, authToken, get]);
 
   // Fetch performance alerts
   const fetchAlerts = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:8000/api/model-performance/alerts?hours=24', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+    if (!isAuthenticated || !authToken) {
+      console.error('Authentication required for alerts data');
+      return;
+    }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    try {
+      const response = await get('http://localhost:8000/api/model-performance/alerts?hours=24');
+
+      if (!response.success || !response.data) {
+        throw new Error('Failed to fetch alerts data');
       }
 
-      const data = await response.json();
+      const data = response.data as any;
       
       // Combine all alert types
       const allAlerts: PerformanceAlert[] = [
@@ -692,7 +707,7 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
     } catch (err) {
       console.error('Failed to fetch alerts:', err);
     }
-  }, [authToken]);
+  }, [isAuthenticated, authToken, get]);
 
   // Check for fallback strategy activation
   const checkFallbackStrategy = useCallback(() => {
@@ -802,15 +817,15 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
 
   // Acknowledge alert
   const acknowledgeAlert = useCallback(async (alertId: string) => {
-    try {
-      const response = await fetch(`http://localhost:8000/api/model-performance/alerts/${alertId}/acknowledge`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+    if (!isAuthenticated || !authToken) {
+      console.error('Authentication required to acknowledge alerts');
+      return;
+    }
 
-      if (response.ok) {
+    try {
+      const response = await post(`http://localhost:8000/api/model-performance/alerts/${alertId}/acknowledge`);
+
+      if (response.success) {
         setAlerts(prev => prev.map(alert => 
           alert.id === alertId ? { ...alert, acknowledged: true } : alert
         ));
@@ -818,26 +833,26 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
     } catch (err) {
       console.error('Failed to acknowledge alert:', err);
     }
-  }, [authToken]);
+  }, [isAuthenticated, authToken, post]);
 
   // Trigger model retraining
   const triggerRetraining = useCallback(async (modelName: string) => {
-    try {
-      const response = await fetch(`http://localhost:8000/api/model-performance/models/${modelName}/trigger-retraining`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
+    if (!isAuthenticated || !authToken) {
+      console.error('Authentication required to trigger retraining');
+      return;
+    }
 
-      if (response.ok) {
+    try {
+      const response = await post(`http://localhost:8000/api/model-performance/models/${modelName}/trigger-retraining`);
+
+      if (response.success) {
         // Refresh data after triggering retraining
         fetchAllData();
       }
     } catch (err) {
       console.error('Failed to trigger retraining:', err);
     }
-  }, [authToken, fetchAllData]);
+  }, [isAuthenticated, authToken, post, fetchAllData]);
 
   // Initialize component
   useEffect(() => {
@@ -882,11 +897,11 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
 
   if (error && !systemHealth) {
     return (
-      <DashboardContainer variant="neon">
+      <DashboardContainer $variant="neon">
         <div style={{ textAlign: 'center', padding: '2rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '1rem', color: '#ff6b6b' }}>⚠️</div>
           <div style={{ color: '#ff6b6b', marginBottom: '1rem' }}>{error}</div>
-          <CyberpunkButton variant="primary" onClick={fetchAllData}>
+          <CyberpunkButton $variant="primary" onClick={fetchAllData}>
             Retry Connection
           </CyberpunkButton>
         </div>
@@ -895,7 +910,7 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
   }
 
   return (
-    <DashboardContainer variant="hologram">
+    <DashboardContainer $variant="hologram">
       <DashboardHeader>
         <h2>🔍 Performance Monitoring</h2>
         <div className="controls">
@@ -904,17 +919,17 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
             <span>{connected ? 'Live Monitoring' : 'Polling Mode'}</span>
           </div>
           <CyberpunkButton 
-            variant="secondary" 
-            size="sm"
+            $variant="secondary" 
+            $size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             {autoRefresh ? 'Disable Auto-Refresh' : 'Enable Auto-Refresh'}
           </CyberpunkButton>
           <CyberpunkButton 
-            variant="secondary" 
-            size="sm"
+            $variant="secondary" 
+            $size="sm"
             onClick={fetchAllData}
-            loading={loading}
+            $loading={loading}
           >
             Refresh
           </CyberpunkButton>
@@ -950,10 +965,10 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
               </ul>
             </div>
             <div className="fallback-actions">
-              <CyberpunkButton variant="primary" size="sm">
+              <CyberpunkButton $variant="primary" $size="sm">
                 Force Recovery
               </CyberpunkButton>
-              <CyberpunkButton variant="secondary" size="sm">
+              <CyberpunkButton $variant="secondary" $size="sm">
                 Escalate Alert
               </CyberpunkButton>
             </div>
@@ -1095,16 +1110,16 @@ export const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashb
                 )}
                 <div className="alert-actions">
                   <CyberpunkButton 
-                    variant="secondary" 
-                    size="sm"
+                    $variant="secondary" 
+                    $size="sm"
                     onClick={() => acknowledgeAlert(alert.id)}
                   >
                     Acknowledge
                   </CyberpunkButton>
                   {alert.alert_type === 'retraining' && (
                     <CyberpunkButton 
-                      variant="primary" 
-                      size="sm"
+                      $variant="primary" 
+                      $size="sm"
                       onClick={() => triggerRetraining(alert.model_name)}
                     >
                       Trigger Retraining

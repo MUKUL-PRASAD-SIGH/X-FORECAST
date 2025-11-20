@@ -2,14 +2,35 @@ import React, { ReactNode, ButtonHTMLAttributes } from 'react';
 import styled, { css } from 'styled-components';
 import { motion } from 'framer-motion';
 
-interface CyberpunkButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size'> {
+// Functional props interface
+interface CyberpunkButtonFunctionalProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size'> {
   children: ReactNode;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+// Styled props interface
+interface CyberpunkButtonStyledProps {
   $variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   $size?: 'sm' | 'md' | 'lg';
   $loading?: boolean;
   $glitch?: boolean;
-  className?: string;
 }
+
+// Motion props interface
+interface CyberpunkButtonMotionProps {
+  whileHover?: any;
+  whileTap?: any;
+  whileFocus?: any;
+  initial?: any;
+  animate?: any;
+  exit?: any;
+  transition?: any;
+}
+
+// Combined interface
+interface CyberpunkButtonProps extends CyberpunkButtonFunctionalProps, CyberpunkButtonStyledProps, CyberpunkButtonMotionProps {}
 
 const buttonVariants = {
   primary: css`
@@ -73,11 +94,11 @@ const sizeVariants = {
 
 const StyledButton = styled(motion.button).withConfig({
   shouldForwardProp: (prop) => {
-    // Filter out transient props and styling-specific props
+    // Filter out transient props (prefixed with $) and styling-specific props
     return !prop.startsWith('$') && 
            !['variant', 'size', 'loading', 'glitch'].includes(prop);
   }
-})<CyberpunkButtonProps>`
+})<CyberpunkButtonStyledProps>`
   font-family: ${props => props.theme.typography.fontFamily.primary};
   font-weight: ${props => props.theme.typography.fontWeight.bold};
   border-radius: 4px;
@@ -160,26 +181,49 @@ export const CyberpunkButton: React.FC<CyberpunkButtonProps> = ({
   $glitch = false,
   onClick,
   className,
-  ...props
+  // Separate motion props from HTML button props
+  whileHover,
+  whileTap,
+  whileFocus,
+  initial,
+  animate,
+  exit,
+  transition,
+  ...htmlProps
 }) => {
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (!disabled && !$loading && onClick) {
-      onClick();
+      onClick(e);
     }
+  };
+
+  // Motion props for framer-motion
+  const motionProps = {
+    whileHover: whileHover || (disabled || $loading ? {} : { scale: 1.05 }),
+    whileTap: whileTap || (disabled || $loading ? {} : { scale: 0.95 }),
+    whileFocus,
+    initial,
+    animate,
+    exit,
+    transition,
+  };
+
+  // Styled props
+  const styledProps = {
+    $variant,
+    $size,
+    $loading,
+    $glitch,
   };
 
   return (
     <StyledButton
-      $variant={$variant}
-      $size={$size}
+      {...styledProps}
+      {...motionProps}
       disabled={disabled || $loading}
-      $loading={$loading}
-      $glitch={$glitch}
       onClick={handleClick}
       className={className}
-      whileHover={{ scale: disabled || $loading ? 1 : 1.05 }}
-      whileTap={{ scale: disabled || $loading ? 1 : 0.95 }}
-      {...props}
+      {...htmlProps}
     >
       <LoadingText $loading={$loading}>
         {children}

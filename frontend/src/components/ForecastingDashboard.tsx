@@ -8,6 +8,8 @@ import { WeightDistributionChart } from './charts/WeightDistributionChart';
 import { ScenarioPlanning } from './ScenarioPlanning';
 import { ForecastComparison } from './ForecastComparison';
 import { ForecastExport } from './ForecastExport';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
 
 // Types for forecast data
 interface TimeSeriesPoint {
@@ -38,7 +40,7 @@ interface ForecastVisualization {
 }
 
 interface ForecastingDashboardProps {
-  authToken: string;
+  authToken?: string; // Make optional since we'll use AuthContext
 }
 
 interface ScenarioResult {
@@ -342,7 +344,9 @@ const TabContent = styled(motion.div)`
   width: 100%;
 `;
 
-export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ authToken }) => {
+export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ authToken: propAuthToken }) => {
+  const { isAuthenticated } = useAuth();
+  const { post } = useApiClient();
   const [selectedHorizon, setSelectedHorizon] = useState(6);
   const [forecastData, setForecastData] = useState<ForecastVisualization | null>(null);
   const [loading, setLoading] = useState(false);
@@ -356,24 +360,21 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
 
   // Generate forecast data
   const generateForecast = async () => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
     try {
-      const response = await fetch('/api/company-sales/forecast', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ horizon_months: selectedHorizon }),
+      const response = await post<any>('/api/company-sales/forecast', { 
+        horizon_months: selectedHorizon 
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      if (response.success && response.data) {
+        const data = response.data;
       
       // Transform API response to component format
       const transformedData: ForecastVisualization = {
@@ -430,7 +431,10 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
         }
       };
       
-      setForecastData(transformedData);
+        setForecastData(transformedData);
+      } else {
+        throw new Error(response.error || 'Failed to generate forecast');
+      }
     } catch (err) {
       console.error('Forecast generation error:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate forecast');
@@ -650,7 +654,7 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
           {activeTab === 'forecast' && (
             <>
               {/* Forecast Controls */}
-              <ControlsSection variant="neon" padding="lg">
+              <ControlsSection $variant="neon" $padding="lg">
                 <CardTitle>🔮 Ensemble Forecast Configuration</CardTitle>
         
         <ControlsGrid>
@@ -723,7 +727,7 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
       {/* Main Charts */}
       <ChartsGrid>
         {/* Forecast Chart */}
-        <MainChartContainer variant="hologram" padding="lg">
+        <MainChartContainer $variant="hologram" $padding="lg">
           <CardTitle>
             📈 {chartType === '3d' ? '3D Holographic' : '2D Holographic'} Forecast Visualization
           </CardTitle>
@@ -779,7 +783,7 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
         {/* Side Panel */}
         <SidePanel>
           {/* Model Weights */}
-          <ModelWeightsCard variant="glass" padding="lg">
+          <ModelWeightsCard $variant="glass" $padding="lg">
             <CardTitle>⚖️ Model Weight Distribution</CardTitle>
             
             {forecastData && (
@@ -857,7 +861,6 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
 
           {activeTab === 'scenarios' && (
             <ScenarioPlanning
-              authToken={authToken}
               baselineData={forecastData}
               onScenarioUpdate={handleScenarioUpdate}
             />
@@ -876,7 +879,6 @@ export const ForecastingDashboard: React.FC<ForecastingDashboardProps> = ({ auth
 
           {activeTab === 'export' && (
             <ForecastExport
-              authToken={authToken}
               forecastData={forecastData}
               scenarioData={scenarioResults}
               onExportComplete={handleExportComplete}

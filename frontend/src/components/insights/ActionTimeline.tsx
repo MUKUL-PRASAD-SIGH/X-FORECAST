@@ -404,7 +404,7 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({
   };
 
   return (
-    <TimelineContainer variant="hologram" className={className}>
+    <TimelineContainer $variant="hologram" className={className}>
       <TimelineHeader>
         <HeaderLeft>
           <TimelineTitle>{recommendation.title}</TimelineTitle>
@@ -458,8 +458,8 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({
                 </div>
                 <PhaseActions>
                   <ActionButton
-                    variant="secondary"
-                    size="sm"
+                    $variant="secondary"
+                    $size="sm"
                     onClick={() => handleStartPhase(phase.key)}
                     disabled={activePhase === phase.key}
                   >
@@ -487,8 +487,8 @@ export const ActionTimeline: React.FC<ActionTimelineProps> = ({
                           {action}
                         </ActionText>
                         <ActionButton
-                          variant={isCompleted ? "secondary" : "primary"}
-                          size="sm"
+                          $variant={isCompleted ? "secondary" : "primary"}
+                          $size="sm"
                           onClick={() => handleCompleteAction(phase.key, actionIndex)}
                         >
                           {isCompleted ? '✓ Done' : 'Mark Done'}

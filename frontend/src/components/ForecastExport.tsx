@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { CyberpunkCard, CyberpunkButton } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
 
 interface ExportOptions {
   format: 'pdf' | 'excel' | 'json' | 'csv';
@@ -19,7 +21,6 @@ interface ExportOptions {
 }
 
 interface ForecastExportProps {
-  authToken: string;
   forecastData?: any;
   scenarioData?: any[];
   onExportComplete?: (result: { success: boolean; downloadUrl?: string; error?: string }) => void;
@@ -260,11 +261,12 @@ const CardTitle = styled.h3`
 `;
 
 export const ForecastExport: React.FC<ForecastExportProps> = ({ 
-  authToken, 
   forecastData,
   scenarioData,
   onExportComplete 
 }) => {
+  const { authToken, isAuthenticated } = useAuth();
+  const { post } = useApiClient();
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     format: 'pdf',
     includeCharts: true,
@@ -308,6 +310,11 @@ export const ForecastExport: React.FC<ForecastExportProps> = ({
 
   // Generate export
   const generateExport = async () => {
+    if (!isAuthenticated || !authToken) {
+      setExportStatus({ type: 'error', message: 'Authentication required for export' });
+      return;
+    }
+
     setExporting(true);
     setExportProgress(0);
     setExportStatus({ type: 'info', message: 'Preparing export...' });
@@ -330,21 +337,14 @@ export const ForecastExport: React.FC<ForecastExportProps> = ({
 
       // Attempt actual export API call
       try {
-        const response = await fetch('/api/company-sales/export-forecast', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({
-            export_options: exportOptions,
-            forecast_data: forecastData,
-            scenario_data: scenarioData
-          }),
+        const response = await post('/api/company-sales/export-forecast', {
+          export_options: exportOptions,
+          forecast_data: forecastData,
+          scenario_data: scenarioData
         });
 
-        if (response.ok) {
-          const result = await response.json();
+        if (response.success && response.data) {
+          const result = response.data as any;
           setExportStatus({ 
             type: 'success', 
             message: `Export completed successfully! Format: ${exportOptions.format.toUpperCase()}` 
@@ -367,7 +367,7 @@ export const ForecastExport: React.FC<ForecastExportProps> = ({
             document.body.removeChild(link);
           }
         } else {
-          throw new Error(`Export failed: ${response.statusText}`);
+          throw new Error(`Export failed: ${response.error || 'Unknown error'}`);
         }
       } catch (apiError) {
         console.warn('API export failed, generating mock download:', apiError);
@@ -476,7 +476,7 @@ export const ForecastExport: React.FC<ForecastExportProps> = ({
   };
 
   return (
-    <ExportContainer variant="neon" padding="lg">
+    <ExportContainer $variant="neon" $padding="lg">
       <CardTitle>📤 Forecast Export & Reporting</CardTitle>
       
       <OptionsGrid>

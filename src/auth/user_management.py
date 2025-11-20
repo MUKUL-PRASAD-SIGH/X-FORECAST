@@ -14,6 +14,9 @@ import sqlite3
 import os
 import logging
 
+# Import comprehensive logging system
+from src.utils.logging_config import comprehensive_logger
+
 logger = logging.getLogger(__name__)
 
 # Import RAG system for initialization
@@ -95,8 +98,10 @@ class UserManager:
         conn.close()
     
     def register_user(self, email: str, password: str, company_name: str, 
-                     business_type: str, industry: str = "retail") -> Dict:
+                     business_type: str, industry: str = "retail", ip_address: str = None) -> Dict:
         """Register new business user with email verification and automatic RAG initialization"""
+        start_time = datetime.now()
+        
         try:
             user_id = str(uuid.uuid4())
             # Use bcrypt for better password hashing
@@ -136,6 +141,14 @@ class UserManager:
             # Initialize RAG system for the new user
             rag_success = self._initialize_user_rag(user_id, company_name)
             
+            # Log successful registration
+            comprehensive_logger.log_registration_success(
+                user_id=user_id,
+                email=email,
+                company_name=company_name,
+                ip_address=ip_address or "unknown"
+            )
+            
             return {
                 "success": True, 
                 "user_id": user_id, 
@@ -146,13 +159,31 @@ class UserManager:
             }
             
         except sqlite3.IntegrityError:
+            # Log registration failure
+            comprehensive_logger.log_registration_failure(
+                email=email,
+                company_name=company_name,
+                ip_address=ip_address or "unknown",
+                reason="Email already exists"
+            )
             return {"success": False, "message": "Email already exists"}
         except Exception as e:
-            logger.error(f"Error registering user {email}: {str(e)}")
-            return {"success": False, "message": str(e)}
+            error_msg = str(e)
+            logger.error(f"Error registering user {email}: {error_msg}")
+            
+            # Log registration failure
+            comprehensive_logger.log_registration_failure(
+                email=email,
+                company_name=company_name,
+                ip_address=ip_address or "unknown",
+                reason=error_msg
+            )
+            return {"success": False, "message": error_msg}
     
-    def authenticate_user(self, email: str, password: str) -> Optional[Dict]:
+    def authenticate_user(self, email: str, password: str, ip_address: str = None, session_id: str = None) -> Optional[Dict]:
         """Authenticate user and return JWT token"""
+        start_time = datetime.now()
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -166,12 +197,26 @@ class UserManager:
         user_data = cursor.fetchone()
         
         if not user_data:
+            # Log failed login attempt
+            comprehensive_logger.log_login_failure(
+                email=email,
+                ip_address=ip_address or "unknown",
+                reason="User not found",
+                session_id=session_id
+            )
             return None
         
         user_id, email, company_name, business_type, subscription_tier, stored_hash, email_verified, failed_attempts, locked_until = user_data
         
         # Check if account is locked
         if locked_until and datetime.fromisoformat(locked_until) > datetime.now():
+            # Log failed login attempt
+            comprehensive_logger.log_login_failure(
+                email=email,
+                ip_address=ip_address or "unknown",
+                reason="Account locked",
+                session_id=session_id
+            )
             return {"error": "Account temporarily locked due to too many failed login attempts"}
         
         # Verify password using bcrypt
@@ -190,11 +235,25 @@ class UserManager:
             conn.commit()
             conn.close()
             
+            # Log failed login attempt
+            comprehensive_logger.log_login_failure(
+                email=email,
+                ip_address=ip_address or "unknown",
+                reason="Invalid password",
+                session_id=session_id
+            )
             return None
         
         # Check email verification
         if not email_verified:
             conn.close()
+            # Log failed login attempt
+            comprehensive_logger.log_login_failure(
+                email=email,
+                ip_address=ip_address or "unknown",
+                reason="Email not verified",
+                session_id=session_id
+            )
             return {"error": "Email not verified. Please check your email for verification link."}
         
         # Reset failed login attempts on successful login
@@ -213,6 +272,15 @@ class UserManager:
         }
         
         token = jwt.encode(payload, self.secret_key, algorithm="HS256")
+        
+        # Log successful login
+        comprehensive_logger.log_login_success(
+            user_id=user_id,
+            email=email,
+            company_name=company_name,
+            ip_address=ip_address or "unknown",
+            session_id=session_id
+        )
         
         return {
             "success": True,
@@ -380,28 +448,62 @@ class UserManager:
     
     def _initialize_user_rag(self, user_id: str, company_name: str) -> bool:
         """Initialize RAG system for a new user"""
+        start_time = datetime.now()
+        
         try:
             if real_vector_rag is None:
+                error_msg = "RAG system not available"
                 logger.warning(f"RAG system not available for user {user_id}")
-                self._update_rag_status(user_id, "failed", "RAG system not available")
+                self._update_rag_status(user_id, "failed", error_msg)
+                
+                # Log RAG initialization failure
+                comprehensive_logger.log_rag_initialization_failure(
+                    user_id=user_id,
+                    company_name=company_name,
+                    error_message=error_msg
+                )
                 return False
             
             # Initialize company-specific RAG
             success = real_vector_rag.initialize_company_rag(user_id, company_name)
             
+            duration_ms = (datetime.now() - start_time).total_seconds() * 1000
+            
             if success:
                 self._update_rag_status(user_id, "initialized")
                 logger.info(f"RAG system initialized for user {user_id} ({company_name})")
+                
+                # Log successful RAG initialization
+                comprehensive_logger.log_rag_initialization_success(
+                    user_id=user_id,
+                    company_name=company_name,
+                    duration_ms=duration_ms
+                )
                 return True
             else:
-                self._update_rag_status(user_id, "failed", "RAG initialization failed")
+                error_msg = "RAG initialization failed"
+                self._update_rag_status(user_id, "failed", error_msg)
                 logger.error(f"Failed to initialize RAG for user {user_id}")
+                
+                # Log RAG initialization failure
+                comprehensive_logger.log_rag_initialization_failure(
+                    user_id=user_id,
+                    company_name=company_name,
+                    error_message=error_msg
+                )
                 return False
                 
         except Exception as e:
             error_msg = f"RAG initialization error: {str(e)}"
             logger.error(f"Error initializing RAG for user {user_id}: {error_msg}")
             self._update_rag_status(user_id, "failed", error_msg)
+            
+            # Log RAG initialization failure
+            comprehensive_logger.log_rag_initialization_failure(
+                user_id=user_id,
+                company_name=company_name,
+                error_message=error_msg
+            )
             return False
     
     def _update_rag_status(self, user_id: str, status: str, error_message: str = None):

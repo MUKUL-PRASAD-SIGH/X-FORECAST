@@ -53,7 +53,7 @@ export const useWebSocket = ({
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket connected to:', url);
         setConnected(true);
         setError(null);
         attemptRef.current = 0;
@@ -67,14 +67,22 @@ export const useWebSocket = ({
         }, pingInterval);
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('WebSocket disconnected:', event.code, event.reason);
         setConnected(false);
         cleanup();
 
+        // Don't reconnect if it was a manual close or authentication error
+        if (event.code === 1000 || event.code === 1008) {
+          setError('WebSocket connection closed. Please refresh the page.');
+          return;
+        }
+
         // Attempt reconnection with exponential backoff
         if (attemptRef.current < reconnectAttempts) {
-          console.log(`Reconnecting in ${backoffRef.current}ms...`);
+          console.log(`Reconnecting in ${backoffRef.current}ms... (attempt ${attemptRef.current + 1}/${reconnectAttempts})`);
+          setError(`Connection lost. Reconnecting... (${attemptRef.current + 1}/${reconnectAttempts})`);
+          
           reconnectTimeoutRef.current = setTimeout(() => {
             attemptRef.current += 1;
             backoffRef.current = Math.min(
@@ -84,13 +92,13 @@ export const useWebSocket = ({
             connect();
           }, backoffRef.current);
         } else {
-          setError('Maximum reconnection attempts reached. Please try manually reconnecting.');
+          setError('Connection failed. Using polling mode instead.');
         }
       };
 
       ws.onerror = (event) => {
         console.error('WebSocket error:', event);
-        setError('Connection error occurred. Attempting to reconnect...');
+        setError('Connection error. Falling back to polling mode.');
       };
 
       ws.onmessage = (event) => {
@@ -111,7 +119,7 @@ export const useWebSocket = ({
       };
     } catch (err) {
       console.error('Error creating WebSocket:', err);
-      setError('Failed to create WebSocket connection. Please check your network connection.');
+      setError('WebSocket not supported. Using polling mode.');
     }
   }, [url, cleanup, onMessage, pingInterval, reconnectAttempts, initialBackoffDelay, maxBackoffDelay]);
 

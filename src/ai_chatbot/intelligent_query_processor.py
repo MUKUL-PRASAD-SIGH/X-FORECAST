@@ -109,39 +109,64 @@ class IntelligentQueryProcessor:
                                       session_id: str,
                                       user_context: Optional[Dict[str, Any]] = None) -> EnsembleChatResponse:
         """
-        Process query with intelligent understanding and context management
+        Process query with intelligent understanding, context management, and company-specific RAG
         
         Args:
             query: User query string
             user_id: User identifier
             session_id: Session identifier
-            user_context: Additional user context
+            user_context: Additional user context including company information
             
         Returns:
-            Enhanced chat response with intelligent processing
+            Enhanced chat response with intelligent processing and company context
         """
         try:
             logger.info(f"Processing intelligent query for user {user_id}: {query[:100]}...")
             
+            # Extract company context
+            company_name = "Unknown Company"
+            if user_context:
+                company_name = user_context.get("company_name", "Unknown Company")
+            
             # Get or create conversation context
             conversation_context = self._get_conversation_context(user_id, session_id)
             
-            # Update conversation context with new query
-            self._update_conversation_context(conversation_context, query, user_context)
+            # Update conversation context with new query and company information
+            enhanced_user_context = user_context.copy() if user_context else {}
+            enhanced_user_context["company_name"] = company_name
+            self._update_conversation_context(conversation_context, query, enhanced_user_context)
+            
+            # Check company RAG availability and add to context
+            rag_available = False
+            try:
+                from src.rag.real_vector_rag import real_vector_rag
+                if user_id in real_vector_rag.user_metadata:
+                    rag_available = True
+                    enhanced_user_context["rag_available"] = True
+                    logger.info(f"Company RAG available for {company_name}")
+                else:
+                    enhanced_user_context["rag_available"] = False
+                    logger.info(f"Company RAG not initialized for {company_name}")
+            except ImportError:
+                enhanced_user_context["rag_available"] = False
+                logger.warning("RAG system not available")
             
             # Understand the query with context
             query_understanding = self._understand_query_with_context(query, conversation_context)
             
             # Check if clarification is needed
             if self._needs_clarification(query_understanding):
-                return await self._generate_clarifying_response(query_understanding, conversation_context)
+                clarifying_response = await self._generate_clarifying_response(query_understanding, conversation_context)
+                # Add company branding to clarifying response
+                clarifying_response.response_text = f"🏢 **{company_name} AI Assistant**\n\n{clarifying_response.response_text}"
+                return clarifying_response
             
             # Enhance query with conversation context
             enhanced_query = self._enhance_query_with_context(query, conversation_context)
             
-            # Process with ensemble chat processor
+            # Process with ensemble chat processor (which now includes RAG integration)
             base_response = await self.ensemble_processor.process_ensemble_query(
-                enhanced_query, user_context
+                enhanced_query, enhanced_user_context
             )
             
             # Enhance response with intelligent recommendations
@@ -149,10 +174,22 @@ class IntelligentQueryProcessor:
                 base_response, query_understanding, conversation_context
             )
             
+            # Add company-specific enhancements if RAG is not available
+            if not rag_available:
+                # Modify response to encourage data upload
+                if "upload" not in enhanced_response.response_text.lower():
+                    enhanced_response.response_text += f"\n\n💡 **Tip for {company_name}**: Upload your company's CSV or PDF files to get personalized insights and forecasts based on your actual data."
+                
+                # Add company-specific suggested actions
+                if enhanced_response.suggested_actions:
+                    enhanced_response.suggested_actions.insert(0, f"Upload {company_name} data files")
+                else:
+                    enhanced_response.suggested_actions = [f"Upload {company_name} data files"]
+            
             # Update conversation history
             self._update_conversation_history(conversation_context, query, enhanced_response)
             
-            logger.info(f"Generated intelligent response with {enhanced_response.confidence:.2f} confidence")
+            logger.info(f"Generated intelligent response for {company_name} with {enhanced_response.confidence:.2f} confidence")
             return enhanced_response
             
         except Exception as e:

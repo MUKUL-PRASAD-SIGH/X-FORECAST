@@ -554,8 +554,8 @@ export const ChurnRiskAlert: React.FC<ChurnRiskAlertProps> = ({
                             <ActionButton
                               key={idx}
                               actionType={getActionType(action)}
-                              size="sm"
-                              loading={actionLoading === `${risk.customer_id}-${action}`}
+                              $size="sm"
+                              $loading={actionLoading === `${risk.customer_id}-${action}`}
                               onClick={() => handleAction(risk.customer_id, action)}
                             >
                               {action}

@@ -318,7 +318,7 @@ export const ForecastComparison: React.FC<ForecastComparisonProps> = ({
   };
 
   return (
-    <ComparisonContainer variant="hologram" padding="lg">
+    <ComparisonContainer $variant="hologram" $padding="lg">
       <CardTitle>📊 Scenario Comparison Analysis</CardTitle>
       
       {/* Chart */}

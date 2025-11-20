@@ -209,13 +209,34 @@ async def upload_pdf(
                 # Remove invalid file
                 os.remove(file_path)
                 
+                # Determine error type from extraction result
+                error_type = "extraction"
+                if extraction_result.metadata and extraction_result.metadata.error_message:
+                    # Try to extract error type from the error message or metadata
+                    error_msg = extraction_result.metadata.error_message.lower()
+                    if "encrypted" in error_msg:
+                        error_type = "encrypted"
+                    elif "corrupted" in error_msg or "invalid pdf" in error_msg:
+                        error_type = "corrupted"
+                    elif "no text" in error_msg:
+                        error_type = "no_text_found"
+                    elif "too large" in error_msg:
+                        error_type = "file_too_large"
+                    elif "not found" in error_msg:
+                        error_type = "file_not_found"
+                
+                error_details = pdf_processor.get_error_suggestions(error_type)
+                
+                # Add fallback suggestions for better user experience
+                if error_details.get('recoverable', False):
+                    fallback_suggestions = pdf_processor.get_fallback_suggestions(file_path)
+                    error_details['fallback_options'] = fallback_suggestions
+                
                 return PDFUploadResponse(
                     success=False,
                     message=f"PDF processing failed: {extraction_result.error}",
                     processing_status="failed",
-                    error_details=pdf_processor.get_error_suggestions(
-                        extraction_result.error.split(':')[0] if ':' in extraction_result.error else "extraction"
-                    )
+                    error_details=error_details
                 )
             
             # Schedule background processing for RAG integration
@@ -243,11 +264,17 @@ async def upload_pdf(
                 os.remove(file_path)
             
             logger.error(f"PDF processing error: {str(e)}")
+            
+            # Provide comprehensive error details
+            error_details = pdf_processor.get_error_suggestions("extraction")
+            fallback_suggestions = pdf_processor.get_fallback_suggestions(file_path)
+            error_details['fallback_options'] = fallback_suggestions
+            
             return PDFUploadResponse(
                 success=False,
                 message=f"PDF processing error: {str(e)}",
                 processing_status="failed",
-                error_details=pdf_processor.get_error_suggestions("extraction")
+                error_details=error_details
             )
         
     except Exception as e:

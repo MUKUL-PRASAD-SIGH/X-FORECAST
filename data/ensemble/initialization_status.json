@@ -1,0 +1,23 @@
+{
+  "initialized": true,
+  "models": [
+    "arima",
+    "ets",
+    "xgboost",
+    "lstm",
+    "croston"
+  ],
+  "weights": {
+    "arima": 0.2,
+    "ets": 0.2,
+    "xgboost": 0.2,
+    "lstm": 0.2,
+    "croston": 0.2
+  },
+  "timestamp": "2025-11-20T10:06:13.557616",
+  "config": {
+    "adaptive_learning_enabled": true,
+    "pattern_detection_enabled": true,
+    "performance_tracking_enabled": true
+  }
+}

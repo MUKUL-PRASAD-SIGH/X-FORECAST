@@ -128,49 +128,133 @@ class EnsembleChatProcessor:
     async def process_ensemble_query(self, query: str, 
                                    user_context: Optional[Dict[str, Any]] = None) -> EnsembleChatResponse:
         """
-        Process ensemble-related query with natural language understanding
+        Process ensemble-related query with natural language understanding and company-specific RAG
         
         Args:
             query: User query string
             user_context: Optional user context (company data, etc.)
             
         Returns:
-            Enhanced chat response with ensemble data
+            Enhanced chat response with ensemble data and company context
         """
         try:
             logger.info(f"Processing ensemble query: {query[:100]}...")
             
+            # Extract company context if available
+            company_name = "Unknown Company"
+            user_id = None
+            if user_context:
+                company_name = user_context.get("company_name", "Unknown Company")
+                user_id = user_context.get("user_id")
+            
+            # Try to integrate with company-specific RAG for enhanced responses
+            rag_context = None
+            if user_id:
+                try:
+                    from src.rag.real_vector_rag import real_vector_rag
+                    
+                    # Check if user has RAG data available
+                    if user_id in real_vector_rag.user_metadata:
+                        # Query company-specific knowledge base for context
+                        rag_results = real_vector_rag.query_user_knowledge_enhanced(user_id, query, top_k=3)
+                        if rag_results:
+                            rag_context = {
+                                "company_data_available": True,
+                                "relevant_documents": len(rag_results),
+                                "data_sources": [doc.get("source", "Unknown") for doc in rag_results[:2]]
+                            }
+                            logger.info(f"Found {len(rag_results)} relevant documents for {company_name}")
+                        else:
+                            rag_context = {"company_data_available": True, "relevant_documents": 0}
+                    else:
+                        rag_context = {"company_data_available": False}
+                        
+                except Exception as rag_error:
+                    logger.warning(f"RAG integration failed: {rag_error}")
+                    rag_context = {"company_data_available": False, "error": str(rag_error)}
+            
             # Parse query to understand intent and context
             query_context = self._parse_query_context(query)
             
+            # Enhance user context with RAG information
+            enhanced_user_context = user_context.copy() if user_context else {}
+            if rag_context:
+                enhanced_user_context["rag_context"] = rag_context
+            
             # Route to appropriate handler based on query type
             if query_context.query_type == 'forecast':
-                response = await self._handle_forecast_query(query, query_context, user_context)
+                response = await self._handle_forecast_query(query, query_context, enhanced_user_context)
             elif query_context.query_type == 'performance':
-                response = await self._handle_performance_query(query, query_context, user_context)
+                response = await self._handle_performance_query(query, query_context, enhanced_user_context)
             elif query_context.query_type == 'model_comparison':
-                response = await self._handle_model_comparison_query(query, query_context, user_context)
+                response = await self._handle_model_comparison_query(query, query_context, enhanced_user_context)
             elif query_context.query_type == 'insights':
-                response = await self._handle_insights_query(query, query_context, user_context)
+                response = await self._handle_insights_query(query, query_context, enhanced_user_context)
             elif query_context.query_type == 'weights':
-                response = await self._handle_weights_query(query, query_context, user_context)
+                response = await self._handle_weights_query(query, query_context, enhanced_user_context)
             elif query_context.query_type == 'confidence':
-                response = await self._handle_confidence_query(query, query_context, user_context)
+                response = await self._handle_confidence_query(query, query_context, enhanced_user_context)
             else:
-                # Fall back to base AI for general queries
-                base_response = await self.base_ai.process_natural_language_query(query, user_context)
-                response = EnsembleChatResponse(
-                    response_text=base_response.response_text,
-                    confidence=base_response.confidence,
-                    sources=base_response.sources,
-                    follow_up_questions=base_response.follow_up_questions,
-                    suggested_actions=base_response.suggested_actions
-                )
+                # For general queries, try to use company-specific RAG first
+                if user_id and rag_context and rag_context.get("company_data_available"):
+                    try:
+                        from src.rag.real_vector_rag import real_vector_rag
+                        rag_response = real_vector_rag.generate_personalized_response(user_id, query)
+                        
+                        response = EnsembleChatResponse(
+                            response_text=rag_response.response_text,
+                            confidence=rag_response.confidence,
+                            sources=[f"{company_name} Knowledge Base"] + [source.filename for source in rag_response.sources],
+                            follow_up_questions=[
+                                f"What other {company_name} data would you like to explore?",
+                                "Need help with forecasting this data?",
+                                "Want to see ensemble model analysis?"
+                            ],
+                            suggested_actions=[
+                                "Generate ensemble forecast",
+                                "Analyze data patterns",
+                                "View model performance"
+                            ]
+                        )
+                    except Exception as rag_error:
+                        logger.warning(f"RAG response generation failed: {rag_error}")
+                        # Fall back to base AI
+                        base_response = await self.base_ai.process_natural_language_query(query, enhanced_user_context)
+                        response = EnsembleChatResponse(
+                            response_text=f"I don't have specific data for {company_name} to answer that question. {base_response.response_text}",
+                            confidence=base_response.confidence * 0.7,  # Lower confidence without company data
+                            sources=base_response.sources,
+                            follow_up_questions=base_response.follow_up_questions,
+                            suggested_actions=base_response.suggested_actions
+                        )
+                else:
+                    # Fall back to base AI for general queries without company data
+                    base_response = await self.base_ai.process_natural_language_query(query, enhanced_user_context)
+                    response = EnsembleChatResponse(
+                        response_text=f"To provide more specific insights for {company_name}, please upload some data files first. {base_response.response_text}",
+                        confidence=base_response.confidence * 0.5,  # Lower confidence without company data
+                        sources=base_response.sources,
+                        follow_up_questions=[
+                            "Would you like to upload company data?",
+                            "Need help with data requirements?",
+                            "Want to see general forecasting capabilities?"
+                        ],
+                        suggested_actions=[
+                            "Upload CSV data files",
+                            "Upload PDF documents",
+                            "View data upload guide"
+                        ]
+                    )
             
-            # Add context-aware follow-up questions
+            # Add context-aware follow-up questions with company branding
             response.follow_up_questions = self._generate_contextual_follow_ups(query_context, response)
             
-            logger.info(f"Generated ensemble response with confidence {response.confidence:.2f}")
+            # Add company context to response if available
+            if rag_context and rag_context.get("company_data_available"):
+                if not hasattr(response, 'company_context') or not response.company_context:
+                    response.company_context = f"Response based on {company_name} data and ensemble models"
+            
+            logger.info(f"Generated ensemble response for {company_name} with confidence {response.confidence:.2f}")
             return response
             
         except Exception as e:

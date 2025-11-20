@@ -101,30 +101,7 @@ cd ..
 ### 🚀 Running the Complete System
 
 #### Option 1: Full Stack Development (Recommended)
-
-**Terminal 1 - Backend API:**
-```bash
-# Start FastAPI backend server
-py -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
-
-# Backend will be available at: http://localhost:8000
-# API docs at: http://localhost:8000/docs
-```
-
-**Terminal 2 - Frontend React App:**
-```bash
-cd frontend
-npm start
-
-# Frontend will be available at: http://localhost:3000
-# Automatically opens in browser
-```
-
-**Terminal 3 - AI Chat System (Optional):**
-```bash
-# Interactive terminal-based system with full features
-python superx_final_system.py
-```
+c
 
 #### Option 2: Quick Demo/Testing
 ```bash

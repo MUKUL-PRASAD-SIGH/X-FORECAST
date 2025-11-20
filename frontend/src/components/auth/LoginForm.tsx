@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { CyberpunkButton, CyberpunkInput, CyberpunkCard } from '../ui';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AuthContainer = styled(motion.div)`
   position: fixed;
@@ -48,10 +49,11 @@ const SwitchText = styled.p`
 `;
 
 interface LoginFormProps {
-  onLogin: (token: string, user: any) => void;
+  onLogin?: (token: string, user: any) => void; // Make optional since we'll use AuthContext
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
+  const { login } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
@@ -138,7 +140,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             console.log('ℹ️ AI system ready. Upload your data to activate personalized features.');
           }
           
-          onLogin(data.token, data.user);
+          // Use AuthContext login method
+          login(data.token, data.user);
+          
+          // Also call the optional onLogin prop for backward compatibility
+          if (onLogin) {
+            onLogin(data.token, data.user);
+          }
         } else {
           // Successful registration - check if RAG was automatically initialized
           if (data.rag_initialized) {
@@ -169,7 +177,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      <AuthCard variant="neon">
+      <AuthCard $variant="neon">
         <Title>{isLogin ? '🔐 Login' : '📝 Register'}</Title>
         
         <Form onSubmit={(e) => handleSubmit(e)}>
@@ -229,7 +237,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           )}
           
           <CyberpunkButton
-            variant="primary"
+            $variant="primary"
             disabled={loading}
             onClick={handleSubmit}
           >

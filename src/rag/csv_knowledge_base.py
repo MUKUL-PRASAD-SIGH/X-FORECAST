@@ -17,6 +17,19 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder for numpy types"""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
+        return super().default(obj)
+
 @dataclass
 class DatasetInfo:
     """Information about uploaded dataset"""
@@ -316,13 +329,13 @@ class CSVKnowledgeBase:
             dataset_info.user_id,
             dataset_info.filename,
             dataset_info.upload_date.isoformat(),
-            json.dumps(dataset_info.columns),
+            json.dumps(dataset_info.columns, cls=NumpyEncoder),
             dataset_info.row_count,
-            json.dumps(dataset_info.data_types),
-            json.dumps(dataset_info.summary_stats),
-            json.dumps(dataset_info.sample_data),
-            json.dumps(dataset_info.insights),
-            json.dumps(dataset_info.suggested_questions)
+            json.dumps(dataset_info.data_types, cls=NumpyEncoder),
+            json.dumps(dataset_info.summary_stats, cls=NumpyEncoder),
+            json.dumps(dataset_info.sample_data, cls=NumpyEncoder),
+            json.dumps(dataset_info.insights, cls=NumpyEncoder),
+            json.dumps(dataset_info.suggested_questions, cls=NumpyEncoder)
         ))
         
         conn.commit()

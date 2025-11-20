@@ -84,7 +84,7 @@ class ConversationalAI:
         return ChatResponse(
             response_text=response_text,
             confidence=0.9,
-            sources=["SuperX Product Catalog", "AI Forecasting Engine"],
+            sources=["Company Product Catalog", "AI Forecasting Engine"],
             follow_up_questions=[
                 "Would you like a detailed forecast?",
                 "Need help with specific products?",

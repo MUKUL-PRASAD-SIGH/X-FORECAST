@@ -6,8 +6,15 @@ Provides endpoints for ensemble forecasting chat functionality with natural lang
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
+
+# Authentication dependency
+def get_current_user(request: Request):
+    """Get current authenticated user from request state"""
+    if not hasattr(request.state, 'user'):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return request.state.user
 
 # Import ensemble chat components
 from src.ai_chatbot.ensemble_chat_processor import EnsembleChatProcessor, EnsembleChatResponse
@@ -108,9 +115,9 @@ def get_intelligent_query_processor() -> IntelligentQueryProcessor:
     return intelligent_query_processor
 
 @router.post("/query", response_model=EnsembleChatResponseModel)
-async def process_ensemble_query(request: EnsembleChatRequest):
+async def process_ensemble_query(request: EnsembleChatRequest, current_user: dict = Depends(get_current_user)):
     """
-    Process ensemble-aware chat query with intelligent understanding
+    Process ensemble-aware chat query with intelligent understanding using company-specific RAG
     
     This endpoint provides natural language processing for ensemble forecasting queries,
     model performance questions, and business insights with plain-language explanations.
@@ -118,23 +125,70 @@ async def process_ensemble_query(request: EnsembleChatRequest):
     try:
         logger.info(f"Processing ensemble chat query from user {request.user_id}: {request.message[:100]}...")
         
+        # Validate user authentication
+        if request.user_id != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="User ID mismatch")
+        
+        # Add company context to request
+        company_name = current_user.get("company_name", "Unknown Company")
+        enhanced_context = request.context or {}
+        enhanced_context.update({
+            "company_name": company_name,
+            "user_id": current_user["user_id"],
+            "authenticated": True
+        })
+        
+        # Check if company RAG is available
+        try:
+            from src.rag.real_vector_rag import real_vector_rag
+            
+            if current_user["user_id"] not in real_vector_rag.user_metadata:
+                # Company RAG not initialized
+                return EnsembleChatResponseModel(
+                    response_id=f"ensemble_error_{int(datetime.now().timestamp())}",
+                    response_text=f"🏢 **{company_name} Ensemble AI**\n\n⚠️ Your company's AI system isn't fully set up yet. Please upload some data files (CSV or PDF) to enable personalized forecasting and insights.\n\nOnce you upload data, I'll be able to provide:\n• Company-specific forecasts\n• Personalized business insights\n• Data-driven recommendations",
+                    confidence=0.0,
+                    sources=[f"{company_name} System Status"],
+                    timestamp=datetime.now().isoformat(),
+                    follow_up_questions=[
+                        "Would you like help uploading data?",
+                        "What type of forecasting do you need?",
+                        "Need guidance on data requirements?"
+                    ],
+                    suggested_actions=[
+                        "Upload CSV data files",
+                        "Upload PDF documents",
+                        "View data upload guide",
+                        "Contact support"
+                    ]
+                )
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Company RAG system not available")
+        
         # Get intelligent query processor
         query_processor = get_intelligent_query_processor()
         
-        # Process query with intelligent understanding
+        # Process query with intelligent understanding and company context
         response = await query_processor.process_intelligent_query(
             query=request.message,
             user_id=request.user_id,
             session_id=request.session_id,
-            user_context=request.context
+            user_context=enhanced_context
         )
         
-        # Convert to API response format
+        # Enhance response with company branding
+        enhanced_response_text = f"🏢 **{company_name} Ensemble AI**\n\n{response.response_text}"
+        
+        # Add company-specific sources
+        company_sources = [f"{company_name} Knowledge Base", f"{company_name} Ensemble Models"]
+        enhanced_sources = company_sources + (response.sources or [])
+        
+        # Convert to API response format with company context
         api_response = EnsembleChatResponseModel(
-            response_id=f"ensemble_chat_{int(datetime.now().timestamp())}",
-            response_text=response.response_text,
+            response_id=f"ensemble_{current_user['user_id']}_{int(datetime.now().timestamp())}",
+            response_text=enhanced_response_text,
             confidence=response.confidence,
-            sources=response.sources or [],
+            sources=enhanced_sources,
             timestamp=datetime.now().isoformat(),
             follow_up_questions=response.follow_up_questions or [],
             suggested_actions=response.suggested_actions or [],
@@ -146,9 +200,12 @@ async def process_ensemble_query(request: EnsembleChatRequest):
             plain_language_summary=response.plain_language_summary
         )
         
-        logger.info(f"Successfully processed ensemble query with confidence {response.confidence:.2f}")
+        logger.info(f"Successfully processed ensemble query for {company_name} with confidence {response.confidence:.2f}")
         return api_response
         
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         logger.error(f"Error processing ensemble chat query: {e}")
         raise HTTPException(
@@ -157,31 +214,48 @@ async def process_ensemble_query(request: EnsembleChatRequest):
         )
 
 @router.post("/basic", response_model=EnsembleChatResponseModel)
-async def process_basic_ensemble_query(request: EnsembleChatRequest):
+async def process_basic_ensemble_query(request: EnsembleChatRequest, current_user: dict = Depends(get_current_user)):
     """
-    Process basic ensemble query without intelligent processing
+    Process basic ensemble query without intelligent processing using company-specific context
     
     Fallback endpoint for direct ensemble chat processing without advanced
-    context management and conversation intelligence.
+    context management and conversation intelligence, but with company-specific RAG.
     """
     try:
         logger.info(f"Processing basic ensemble query from user {request.user_id}: {request.message[:100]}...")
         
+        # Validate user authentication
+        if request.user_id != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="User ID mismatch")
+        
+        company_name = current_user.get("company_name", "Unknown Company")
+        
+        # Add company context to request
+        enhanced_context = request.context or {}
+        enhanced_context.update({
+            "company_name": company_name,
+            "user_id": current_user["user_id"],
+            "authenticated": True
+        })
+        
         # Get ensemble chat processor
         chat_processor = get_ensemble_chat_processor()
         
-        # Process query directly
+        # Process query directly with company context
         response = await chat_processor.process_ensemble_query(
             query=request.message,
-            user_context=request.context
+            user_context=enhanced_context
         )
         
-        # Convert to API response format
+        # Enhance response with company branding
+        enhanced_response_text = f"🏢 **{company_name} Ensemble AI**\n\n{response.response_text}"
+        
+        # Convert to API response format with company context
         api_response = EnsembleChatResponseModel(
-            response_id=f"ensemble_basic_{int(datetime.now().timestamp())}",
-            response_text=response.response_text,
+            response_id=f"ensemble_basic_{current_user['user_id']}_{int(datetime.now().timestamp())}",
+            response_text=enhanced_response_text,
             confidence=response.confidence,
-            sources=response.sources or [],
+            sources=[f"{company_name} Ensemble System"] + (response.sources or []),
             timestamp=datetime.now().isoformat(),
             follow_up_questions=response.follow_up_questions or [],
             suggested_actions=response.suggested_actions or [],
@@ -193,9 +267,12 @@ async def process_basic_ensemble_query(request: EnsembleChatRequest):
             plain_language_summary=response.plain_language_summary
         )
         
-        logger.info(f"Successfully processed basic ensemble query with confidence {response.confidence:.2f}")
+        logger.info(f"Successfully processed basic ensemble query for {company_name} with confidence {response.confidence:.2f}")
         return api_response
         
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         logger.error(f"Error processing basic ensemble query: {e}")
         raise HTTPException(

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CyberpunkCard, CyberpunkButton } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { useApiClient } from '../hooks/useApiClient';
 
 const EnsembleContainer = styled(CyberpunkCard)`
   padding: 2rem;
@@ -260,11 +262,13 @@ interface EnsembleStatusData {
 }
 
 interface EnsembleStatusProps {
-  authToken: string;
+  authToken?: string; // Make optional since we'll use AuthContext
   companyId?: string;
 }
 
-export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, companyId }) => {
+export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken: propAuthToken, companyId }) => {
+  const { isAuthenticated } = useAuth();
+  const { get, post } = useApiClient();
   const [status, setStatus] = useState<EnsembleStatusData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -278,22 +282,22 @@ export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, compa
   };
 
   const fetchEnsembleStatus = async () => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/api/company-sales/ensemble/status', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch ensemble status');
+      const response = await get<EnsembleStatusData>('/api/company-sales/ensemble/status');
+      
+      if (response.success && response.data) {
+        setStatus(response.data);
+      } else {
+        setError(response.error || 'Failed to fetch ensemble status');
       }
-
-      const data = await response.json();
-      setStatus(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -302,26 +306,21 @@ export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, compa
   };
 
   const initializeEnsemble = async () => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/api/company-sales/ensemble/initialize', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to initialize ensemble');
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        setStatus(result.status);
+      const response = await post<{ success: boolean; status?: EnsembleStatusData; message?: string }>('/api/company-sales/ensemble/initialize');
+      
+      if (response.success && response.data?.success) {
+        setStatus(response.data.status!);
       } else {
-        setError(result.message);
+        setError(response.error || response.data?.message || 'Initialization failed');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Initialization failed');
@@ -331,12 +330,14 @@ export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, compa
   };
 
   useEffect(() => {
-    fetchEnsembleStatus();
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchEnsembleStatus, 30000);
-    return () => clearInterval(interval);
-  }, [authToken]);
+    if (propAuthToken) {
+      fetchEnsembleStatus();
+      
+      // Auto-refresh every 30 seconds
+      const interval = setInterval(fetchEnsembleStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [propAuthToken]);
 
   if (loading && !status) {
     return (
@@ -355,7 +356,7 @@ export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, compa
         <div style={{ textAlign: 'center', padding: '2rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '1rem', color: '#ff6b6b' }}>❌</div>
           <div style={{ color: '#ff6b6b', marginBottom: '1rem' }}>{error}</div>
-          <CyberpunkButton variant="primary" onClick={fetchEnsembleStatus}>
+          <CyberpunkButton $variant="primary" onClick={fetchEnsembleStatus}>
             Retry
           </CyberpunkButton>
         </div>
@@ -381,9 +382,9 @@ export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, compa
             to start adaptive forecasting with real-time weight updates.
           </div>
           <CyberpunkButton 
-            variant="primary" 
+            $variant="primary" 
             onClick={initializeEnsemble}
-            loading={loading}
+            $loading={loading}
           >
             Initialize Ensemble Models
           </CyberpunkButton>
@@ -494,10 +495,10 @@ export const EnsembleStatus: React.FC<EnsembleStatusProps> = ({ authToken, compa
 
       <div style={{ textAlign: 'center', marginTop: '1rem' }}>
         <CyberpunkButton 
-          variant="secondary" 
-          size="sm"
+          $variant="secondary" 
+          $size="sm"
           onClick={fetchEnsembleStatus}
-          loading={loading}
+          $loading={loading}
         >
           Refresh Status
         </CyberpunkButton>

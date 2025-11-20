@@ -154,7 +154,7 @@ const ModelStatusCard = styled.div.withConfig({
   @keyframes cardPulse {
     0%, 100% { 
       box-shadow: 0 0 5px ${props => {
-        switch (props.status) {
+        switch (props.$status) {
           case 'training': return 'rgba(0, 255, 255, 0.3)';
           default: return 'transparent';
         }
@@ -162,7 +162,7 @@ const ModelStatusCard = styled.div.withConfig({
     }
     50% { 
       box-shadow: 0 0 15px ${props => {
-        switch (props.status) {
+        switch (props.$status) {
           case 'training': return 'rgba(0, 255, 255, 0.6)';
           default: return 'transparent';
         }
